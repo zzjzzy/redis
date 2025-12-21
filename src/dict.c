@@ -311,8 +311,8 @@ int dictRehash(dict *d, int n) {
          * elements because ht[0].used != 0 */
         assert(DICTHT_SIZE(d->ht_size_exp[0]) > (unsigned long)d->rehashidx);
         while(d->ht_table[0][d->rehashidx] == NULL) {
-            d->rehashidx++;
-            if (--empty_visits == 0) return 1;
+            d->rehashidx++;  // ZZJ 跳过空桶，rehashidx表示rehash到了哪个桶的索引
+            if (--empty_visits == 0) return 1;  // ZZJ 记录遍历到的空桶数
         }
         de = d->ht_table[0][d->rehashidx];
         /* Move all the keys in this bucket from the old to the new hash HT */
