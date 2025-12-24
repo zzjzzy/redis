@@ -738,6 +738,9 @@ dictEntry *dictTwoPhaseUnlinkFind(dict *d, const void *key, dictEntry ***plink, 
 void dictTwoPhaseUnlinkFree(dict *d, dictEntry *he, dictEntry **plink, int table_index) {
     if (he == NULL) return;
     d->ht_used[table_index]--;
+    // ZZJ 这里确实不好理解，**plink是一个地址，指向dictEntry *，
+    // 这个dictEntry *是一个dictEntry的next，这个next是指向he的，也就是包含这个next的dictEntry是he的父节点
+    // 所以修改*plink，就是修改这个next的值，也就是将he的父节点的next指向he的子节点，这样就将he节点摘除了
     *plink = dictGetNext(he);
     dictFreeKey(d, he);
     dictFreeVal(d, he);
@@ -1157,6 +1160,8 @@ static void dictDefragBucket(dict *d, dictEntry **bucketref, dictDefragFunctions
             if (d->type->afterReplaceEntry)
                 d->type->afterReplaceEntry(d, newde);
         }
+        // 到这里bucketref存的地址是指向newde的，这里赋值是将bucketref指向了newde的next
+        // 可能是为了继续defrag下一个？这个要看调用的地方是怎么用的
         bucketref = dictGetNextRef(*bucketref);
     }
 }
@@ -1432,6 +1437,7 @@ static signed char _dictNextExp(unsigned long size)
     if (size <= DICT_HT_INITIAL_SIZE) return DICT_HT_INITIAL_EXP;
     if (size >= LONG_MAX) return (8*sizeof(long)-1);
 
+    // __builtin_clzl用于计算一个无符号长整型数（unsigned long）中从最高位开始的连续零的个数。
     return 8*sizeof(long) - __builtin_clzl(size-1);
 }
 
@@ -1466,6 +1472,7 @@ void *dictFindPositionForInsert(dict *d, const void *key, dictEntry **existing) 
 
     /* If we are in the process of rehashing the hash table, the bucket is
      * always returned in the context of the second (new) hash table. */
+    // ZZJ 也就是rehash期间，新元素都是插入新桶中
     dictEntry **bucket = &d->ht_table[dictIsRehashing(d) ? 1 : 0][idx];
     return bucket;
 }

@@ -2,14 +2,30 @@
 
 ## 进度
 main方法看到这里了initServerConfig();，目前看到这里暂停了，先去看dict.c了。
+看到dictFindPositionForInsert了
 
 ## TODO 
 ### zmalloc
 zmalloc没细看，有空再研究
 
+### dictScanDefrag
+dict.c dictScanDefrag中的桶遍历算法没明白，有时间再继续研究
+
 ## Q&A
 - redis hash rehash过程中，如果有并发问题，怎么办
+
 - dict中元素不使用了，如何释放的内存
+
+- dict rehash pause和resume起什么作用
+dictResetIterator会dictResumeRehashing
+
+- redis dict中的两个哈希桶是怎么用的，哈希期间是从桶0迁移到桶1，那hash期间增删改是在哪个桶操作？
+```c
+    // 如果在rehash中，insert到桶1
+    /* If rehashing is ongoing, we insert in table 1, otherwise in table 0.
+     * Assert that the provided bucket is the right table. */
+    int htidx = dictIsRehashing(d) ? 1 : 0;
+```
 
 ## 知识点
 ### 计算大于x的最下2次幂数
