@@ -1,8 +1,11 @@
 # Redis源码学习路线指南
 
 ## 进度
-main方法看到这里了initServerConfig();，目前看到这里暂停了，先去看dict.c了。
-看到dictFindPositionForInsert了
+main方法看到这里了initServerConfig();，目前看到这里暂停了，先看基础数据结构
+dict.c 看完了
+sds.c 看完了
+adlist.c 看完了
+intset.c 
 
 ## TODO 
 ### zmalloc
@@ -69,6 +72,10 @@ dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFuncti
       in this raw from. Anyway we always want the standard 2-4 variant.
 */
 ```
+
+### 多了个The
+* The when the would_regrow argument is set to 1, it prevents the use of
+* SDS_TYPE_5, which is desired when the sds is likely to be changed again.
 
 ## 可以写文章的功能
 1. redis如何执行一条命令（可以结合微信收藏的一篇文章学习）

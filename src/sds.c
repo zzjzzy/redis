@@ -433,6 +433,7 @@ void sdsIncrLen(sds s, ssize_t incr) {
         }
         case SDS_TYPE_8: {
             SDS_HDR_VAR(8,s);
+            // ZZJ 判断如果是扩大，扩大的长度不能超过剩余空间，如果是缩小，缩小的长度不能超过字符串的长度
             assert((incr >= 0 && sh->alloc-sh->len >= incr) || (incr < 0 && sh->len >= (unsigned int)(-incr)));
             len = (sh->len += incr);
             break;
