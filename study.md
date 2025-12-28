@@ -2,10 +2,35 @@
 
 ## 进度
 main方法看到这里了initServerConfig();，目前看到这里暂停了，先看基础数据结构
+
+===== map =====
 dict.c 看完了
+
+===== string =====
 sds.c 看完了
-adlist.c 看完了
-intset.c 
+
+===== set or list =====
+intset.c（set小对象用） 看完了
+skiplist(zset的底层实现(大对象))
+adlist.c（被listpack替代） 看完了
+listpack（替代ziplist） 看到lpSkip
+ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
+quicklist(adlist+listpack的混合,list的唯一实现)
+
+===== 其他 =====
+rax(STREAM 的核心)
+
+===== 废弃 =====
+zipmap.c 不用学
+
+总结
+- String → SDS / long
+- List → Quicklist → Listpack 节点
+- Hash → Listpack / Dict → SDS
+- Set → Intset / Dict → SDS
+- Sorted Set → Listpack / (Skiplist + Dict) → SDS
+- Stream → Radix Tree → Listpack
+
 
 ## TODO 
 ### zmalloc
@@ -13,6 +38,10 @@ zmalloc没细看，有空再研究
 
 ### dictScanDefrag
 dict.c dictScanDefrag中的桶遍历算法没明白，有时间再继续研究
+
+### 这个方法有时间看下，感觉刷算法会遇到
+string2ll
+lpStringToInt64
 
 ## Q&A
 - redis hash rehash过程中，如果有并发问题，怎么办

@@ -53,50 +53,52 @@
 #define LP_ENCODING_STRING 1
 
 #define LP_ENCODING_7BIT_UINT 0
-#define LP_ENCODING_7BIT_UINT_MASK 0x80
+#define LP_ENCODING_7BIT_UINT_MASK 0x80 // 1000-0000
 #define LP_ENCODING_IS_7BIT_UINT(byte) (((byte)&LP_ENCODING_7BIT_UINT_MASK)==LP_ENCODING_7BIT_UINT)
 #define LP_ENCODING_7BIT_UINT_ENTRY_SIZE 2
 
-#define LP_ENCODING_6BIT_STR 0x80
-#define LP_ENCODING_6BIT_STR_MASK 0xC0
+#define LP_ENCODING_6BIT_STR 0x80 // 1000-0000
+#define LP_ENCODING_6BIT_STR_MASK 0xC0 // 1100-0000
 #define LP_ENCODING_IS_6BIT_STR(byte) (((byte)&LP_ENCODING_6BIT_STR_MASK)==LP_ENCODING_6BIT_STR)
 
-#define LP_ENCODING_13BIT_INT 0xC0
-#define LP_ENCODING_13BIT_INT_MASK 0xE0
+#define LP_ENCODING_13BIT_INT 0xC0 // 1100-0000
+#define LP_ENCODING_13BIT_INT_MASK 0xE0 // 1110-0000
 #define LP_ENCODING_IS_13BIT_INT(byte) (((byte)&LP_ENCODING_13BIT_INT_MASK)==LP_ENCODING_13BIT_INT)
 #define LP_ENCODING_13BIT_INT_ENTRY_SIZE 3
 
-#define LP_ENCODING_12BIT_STR 0xE0
-#define LP_ENCODING_12BIT_STR_MASK 0xF0
+#define LP_ENCODING_12BIT_STR 0xE0 // 1110-0000
+#define LP_ENCODING_12BIT_STR_MASK 0xF0 // 1111-0000
 #define LP_ENCODING_IS_12BIT_STR(byte) (((byte)&LP_ENCODING_12BIT_STR_MASK)==LP_ENCODING_12BIT_STR)
 
-#define LP_ENCODING_16BIT_INT 0xF1
-#define LP_ENCODING_16BIT_INT_MASK 0xFF
+#define LP_ENCODING_16BIT_INT 0xF1 // 1111-0001
+#define LP_ENCODING_16BIT_INT_MASK 0xFF // 1111-1111
 #define LP_ENCODING_IS_16BIT_INT(byte) (((byte)&LP_ENCODING_16BIT_INT_MASK)==LP_ENCODING_16BIT_INT)
 #define LP_ENCODING_16BIT_INT_ENTRY_SIZE 4
 
-#define LP_ENCODING_24BIT_INT 0xF2
-#define LP_ENCODING_24BIT_INT_MASK 0xFF
+#define LP_ENCODING_24BIT_INT 0xF2 // 1111-0010
+#define LP_ENCODING_24BIT_INT_MASK 0xFF // 1111-1111
 #define LP_ENCODING_IS_24BIT_INT(byte) (((byte)&LP_ENCODING_24BIT_INT_MASK)==LP_ENCODING_24BIT_INT)
 #define LP_ENCODING_24BIT_INT_ENTRY_SIZE 5
 
-#define LP_ENCODING_32BIT_INT 0xF3
-#define LP_ENCODING_32BIT_INT_MASK 0xFF
+#define LP_ENCODING_32BIT_INT 0xF3 // 1111-0011
+#define LP_ENCODING_32BIT_INT_MASK 0xFF // 1111-1111
 #define LP_ENCODING_IS_32BIT_INT(byte) (((byte)&LP_ENCODING_32BIT_INT_MASK)==LP_ENCODING_32BIT_INT)
 #define LP_ENCODING_32BIT_INT_ENTRY_SIZE 6
 
-#define LP_ENCODING_64BIT_INT 0xF4
-#define LP_ENCODING_64BIT_INT_MASK 0xFF
+#define LP_ENCODING_64BIT_INT 0xF4 // 1111-0100
+#define LP_ENCODING_64BIT_INT_MASK 0xFF // 1111-1111
 #define LP_ENCODING_IS_64BIT_INT(byte) (((byte)&LP_ENCODING_64BIT_INT_MASK)==LP_ENCODING_64BIT_INT)
 #define LP_ENCODING_64BIT_INT_ENTRY_SIZE 10
 
-#define LP_ENCODING_32BIT_STR 0xF0
-#define LP_ENCODING_32BIT_STR_MASK 0xFF
+#define LP_ENCODING_32BIT_STR 0xF0 // 1111-0000
+#define LP_ENCODING_32BIT_STR_MASK 0xFF // 1111-1111
 #define LP_ENCODING_IS_32BIT_STR(byte) (((byte)&LP_ENCODING_32BIT_STR_MASK)==LP_ENCODING_32BIT_STR)
 
 #define LP_EOF 0xFF
 
-#define LP_ENCODING_6BIT_STR_LEN(p) ((p)[0] & 0x3F)
+// LP_ENCODING_6BIT_STR_MASK是1100-0000，也就是前2位是用来表示flag的，后面的6bit用来表示这个字符串多长
+// 下面这3个函数都是用来获取字符串长度的
+#define LP_ENCODING_6BIT_STR_LEN(p) ((p)[0] & 0x3F) // 0011-1111
 #define LP_ENCODING_12BIT_STR_LEN(p) ((((p)[0] & 0xF) << 8) | (p)[1])
 #define LP_ENCODING_32BIT_STR_LEN(p) (((uint32_t)(p)[1]<<0) | \
                                       ((uint32_t)(p)[2]<<8) | \
@@ -271,7 +273,14 @@ static inline void lpEncodeIntegerGetType(int64_t v, unsigned char *intenc, uint
         *enclen = 1;
     } else if (v >= -4096 && v <= 4095) {
         /* 13 bit integer. */
+        // 1<<13=8192
+        // v=-4096, ((int64_t)1<<13)+v=4096
+        // v=-4095, ((int64_t)1<<13)+v=4097
+        // v=-1, ((int64_t)1<<13)+v=8191
+        // 所以是将13位的有符号整数转换成无符号整数，4096代表-4096，4097代表-4095... 8191代表-1
+        // 8191就是 11111-1111-1111，和用1111-1111表示-1一样
         if (v < 0) v = ((int64_t)1<<13)+v;
+        // ZZJ LP_ENCODING_13BIT_INT是0xC0，也就是1100-0000，和下面的16bits不会冲突，因为16bits是0xF1，也就是1111-0001
         intenc[0] = (v>>8)|LP_ENCODING_13BIT_INT;
         intenc[1] = v&0xff;
         *enclen = 2;
@@ -332,6 +341,8 @@ static inline int lpEncodeGetType(unsigned char *ele, uint32_t size, unsigned ch
         lpEncodeIntegerGetType(v, intenc, enclen);
         return LP_ENCODING_INT;
     } else {
+        // ZZJ enclen代表字符串长度+编码的长度，小于64长度的字符串，会被编码为LP_ENCODING_6BIT_STR(对应lpEncodeString<64的判断)
+        // 而LP_ENCODING_6BIT_STR编码，头部只占用1个字节
         if (size < 64) *enclen = 1+size;
         else if (size < 4096) *enclen = 2+size;
         else *enclen = 5+(uint64_t)size;
@@ -345,23 +356,26 @@ static inline int lpEncodeGetType(unsigned char *ele, uint32_t size, unsigned ch
  * 1 to 5. If 'buf' is NULL the function just returns the number of bytes
  * needed in order to encode the backlen. */
 static inline unsigned long lpEncodeBacklen(unsigned char *buf, uint64_t l) {
-    if (l <= 127) {
+    // 这个方法可以这样理解
+    // 就是把l每7位分组，放在buf的不同位置，其中0位置用来放最高位，由于0位置需要保证最高位为0
+    // 所以如果buf长度是x，l不能大于1111...1111(x*7个1)
+    if (l <= 127) { // 0111-1111
         if (buf) buf[0] = l;
         return 1;
-    } else if (l < 16383) {
+    } else if (l < 16383) { // 0011-1111-1111-1111(14个1)
         if (buf) {
             buf[0] = l>>7;
             buf[1] = (l&127)|128;
         }
         return 2;
-    } else if (l < 2097151) {
+    } else if (l < 2097151) { // 0001-1111-1111-1111-1111-1111(21个1)
         if (buf) {
             buf[0] = l>>14;
             buf[1] = ((l>>7)&127)|128;
             buf[2] = (l&127)|128;
         }
         return 3;
-    } else if (l < 268435455) {
+    } else if (l < 268435455) { // 0000-1111-1111-1111-1111-1111-1111-1111
         if (buf) {
             buf[0] = l>>21;
             buf[1] = ((l>>14)&127)|128;
@@ -387,7 +401,9 @@ static inline uint64_t lpDecodeBacklen(unsigned char *p) {
     uint64_t val = 0;
     uint64_t shift = 0;
     do {
+        // p[0] & 127把最高位清零，因为最高位不是用来表示数的，是个标志位
         val |= (uint64_t)(p[0] & 127) << shift;
+        // p[0] & 128提取最高位，判断是否需要继续
         if (!(p[0] & 128)) break;
         shift += 7;
         p--;
@@ -402,13 +418,17 @@ static inline uint64_t lpDecodeBacklen(unsigned char *p) {
  * before calling this function. */
 static inline void lpEncodeString(unsigned char *buf, unsigned char *s, uint32_t len) {
     if (len < 64) {
+        // 0x80=1000-0000, 64=0100-0000
         buf[0] = len | LP_ENCODING_6BIT_STR;
         memcpy(buf+1,s,len);
     } else if (len < 4096) {
+        // ZZJ 0xE0=1110-0000, 4096=0001-0000-0000-0000
+        // 高8位存在buf[0]，低8位存在buf[1]，由于高8为前4位一定为0，所以高4位可以用来存储LP_ENCODING_12BIT_STR
         buf[0] = (len >> 8) | LP_ENCODING_12BIT_STR;
         buf[1] = len & 0xff;
         memcpy(buf+2,s,len);
     } else {
+        // ZZJ 0xF0=1111-0000
         buf[0] = LP_ENCODING_32BIT_STR;
         buf[1] = len & 0xff;
         buf[2] = (len >> 8) & 0xff;
