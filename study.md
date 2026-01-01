@@ -11,11 +11,18 @@ sds.c 看完了
 
 ===== set or list =====
 intset.c（set小对象用） 看完了
-skiplist(zset的底层实现(大对象))
+skiplist(zset的底层实现(大对象)) 不用看（在t_zset中实现的，直接看t_zset）
 adlist.c（被listpack替代） 看完了
-listpack（替代ziplist） 看到lpSkip
+listpack（替代ziplist） 看完了
 ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
-quicklist(adlist+listpack的混合,list的唯一实现)
+quicklist(adlist+listpack的混合,list的唯一实现) 正在看 __quicklistDelNode
+
+===== t系列 =====
+t_hash
+t_list
+t_set
+t_string
+t_zset
 
 ===== 其他 =====
 rax(STREAM 的核心)
@@ -41,7 +48,19 @@ dict.c dictScanDefrag中的桶遍历算法没明白，有时间再继续研究
 
 ### 这个方法有时间看下，感觉刷算法会遇到
 string2ll
+ll2string
 lpStringToInt64
+
+### *lpGetWithSize unsigned转signed那儿没有细看
+
+### lpRandomPairs assert
+listpack.c lpRandomPairs 会有assert(total_size);，如果total_size真为空，调用者怎么处理的？
+
+### listpack.c 中lpNextRandom应该是用到了什么随机算法
+看下labuladong的算法里有没有提到
+
+### test看一下
+有时间把redis的test看一下，看别人是怎么写测试的
 
 ## Q&A
 - redis hash rehash过程中，如果有并发问题，怎么办
@@ -59,9 +78,14 @@ dictResetIterator会dictResumeRehashing
     int htidx = dictIsRehashing(d) ? 1 : 0;
 ```
 
+- RDB文件是什么样的？
+
 ## 知识点
 ### 计算大于x的最下2次幂数
 看_dictNextExp(dict.c)
+
+### listpack不能存>=UINT32_MAX的
+assert(lpbytes < UINT32_MAX); /* larger values can't be stored */
 
 ## 可以练手的功能
 1. 自己实现一个redis命令
@@ -83,6 +107,9 @@ int16_t pauserehash;
     } while(0)
 ```
 
+### 分支预测
+quicklist.c用到挺多，搜索likely和unlikely
+
 ### 通过定义宏而不是函数优化性能
 dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFunction(key))，为什么要定义成宏，而不是声明一个函数
 宏是内联展开的，没有函数调用开销。
@@ -93,7 +120,21 @@ dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFuncti
 ### redis把dictEntry分成entryIsKey、entryIsNormal、entryIsNoValue
 减少内存占用，可以问ai【redis为什么要把dictEntry分成entryIsKey、entryIsNormal、entryIsNoValue】
 
+### listpack的内存优化就很好
+- 数字型字符串转成数字存储，比如123这个字符串，如果用字符串存储，占3个字节，如果转成int8，只占用1个字节
+
 ## PR!
+### [listpack.c]fetch the elements form the listpack into a output array respecting the original order.
+form应该是from，a应该是an
+pickindex++; 前面多了个空格
+这里可以加个注释，好理解些 while (pickindex < count && lpindex == picks[pickindex].index) {
+
+### quicklist.h
+- 这个字段定义没有写到quicklistNode开头的注释中：unsigned int dont_compress : 1; /* prevent compression of entry that will be used later */
+- 多了个of：Bookmarks are padded with realloc at the end of of the quicklist struct.
+- were应该是where：They should only be used for very big lists if thousands of nodes were the
+
+## PR!(old 以下PR已提交，待通过)
 ### siphash.c from -> form
 ```c
 /*
@@ -106,8 +147,12 @@ dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFuncti
 * The when the would_regrow argument is set to 1, it prevents the use of
 * SDS_TYPE_5, which is desired when the sds is likely to be changed again.
 
+### 多了个into
+/* Helper method to store a string into(这个into应该是打多了) from val or lval into dest */
+
 ## 可以写文章的功能
 1. redis如何执行一条命令（可以结合微信收藏的一篇文章学习）
+2. 当执行set key=val时，这条数据在内存中是怎样存储的？
 
 ## 项目概述
 Redis是一个开源的高性能键值数据库，采用C语言编写。本指南将帮助你系统地学习Redis源码。

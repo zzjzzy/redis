@@ -46,11 +46,18 @@
 typedef struct quicklistNode {
     struct quicklistNode *prev;
     struct quicklistNode *next;
+    // listpack
     unsigned char *entry;
+    // listpack的size
     size_t sz;             /* entry size in bytes */
+    // listpack中元素个数
     unsigned int count : 16;     /* count of items in listpack */
+    // 是否有压缩
     unsigned int encoding : 2;   /* RAW==1 or LZF==2 */
+    // 1=原始数据，不转成listpack存储，当value比较大时，直接保存value。2=listpack
     unsigned int container : 2;  /* PLAIN==1 or PACKED==2 */
+    // 当前node之前是否压缩过，如果之前压缩过，在某些场景下会直接压缩，不会判断是否在压缩深度内
+    // quicklist.c quicklistCompress方法有用到，可以看下
     unsigned int recompress : 1; /* was this node previous compressed? */
     unsigned int attempted_compress : 1; /* node can't compress; too small */
     unsigned int dont_compress : 1; /* prevent compression of entry that will be used later */
@@ -106,10 +113,16 @@ typedef struct quicklistBookmark {
 typedef struct quicklist {
     quicklistNode *head;
     quicklistNode *tail;
+    // ZZJ 所有quicklistNode中所有listpack中的元素个数
     unsigned long count;        /* total count of all entries in all listpacks */
+    // ZZJ quicklistNodes的数量
     unsigned long len;          /* number of quicklistNodes */
+    // 这个是用来限制单个quicklistNode中的listpack大小的，如果fill>=0，限制的是listpack中元素的个数，如果fill<0，限制的是listpack的大小(size)
+    // fill<0时，限制的值是取的optimization_level
     signed int fill : QL_FILL_BITS;       /* fill factor for individual nodes */
+    // 压缩的深度，<=compress的元素不进行压缩，避免热点数据压缩解压带来性能损耗
     unsigned int compress : QL_COMP_BITS; /* depth of end nodes not to compress;0=off */
+    // bookmark的数量
     unsigned int bookmark_count: QL_BM_BITS;
     quicklistBookmark bookmarks[];
 } quicklist;

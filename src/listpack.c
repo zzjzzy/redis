@@ -335,6 +335,7 @@ static inline void lpEncodeIntegerGetType(int64_t v, unsigned char *intenc, uint
  * Regardless of the returned encoding, 'enclen' is populated by reference to
  * the number of bytes that the string or integer encoded element will require
  * in order to be represented. */
+// 计算当前元素需要怎样编码，enclen是整个entry的长度
 static inline int lpEncodeGetType(unsigned char *ele, uint32_t size, unsigned char *intenc, uint64_t *enclen) {
     int64_t v;
     if (lpStringToInt64((const char*)ele, size, &v)) {
@@ -445,6 +446,7 @@ static inline void lpEncodeString(unsigned char *buf, unsigned char *s, uint32_t
  * str), so should only be called when we know 'p' was already validated by
  * lpCurrentEncodedSizeBytes or ASSERT_INTEGRITY_LEN (possibly since 'p' is
  * a return value of another function that validated its return. */
+// 这个entry的大小，不包括backlen
 static inline uint32_t lpCurrentEncodedSizeUnsafe(unsigned char *p) {
     if (LP_ENCODING_IS_7BIT_UINT(p[0])) return 1;
     if (LP_ENCODING_IS_6BIT_STR(p[0])) return 1+LP_ENCODING_6BIT_STR_LEN(p);
@@ -463,6 +465,7 @@ static inline uint32_t lpCurrentEncodedSizeUnsafe(unsigned char *p) {
  * This includes just the encoding byte, and the bytes needed to encode the length
  * of the element (excluding the element data itself)
  * If the element encoding is wrong then 0 is returned. */
+// entry头的大小
 static inline uint32_t lpCurrentEncodedSizeBytes(unsigned char *p) {
     if (LP_ENCODING_IS_7BIT_UINT(p[0])) return 1;
     if (LP_ENCODING_IS_6BIT_STR(p[0])) return 1;
@@ -508,6 +511,7 @@ unsigned char *lpPrev(unsigned char *lp, unsigned char *p) {
     p--; /* Seek the first backlen byte of the last element. */
     uint64_t prevlen = lpDecodeBacklen(p);
     prevlen += lpEncodeBacklen(NULL,prevlen);
+    // 因为上面已经p--了，所以这里需要-1
     p -= prevlen-1; /* Seek the first byte of the previous entry. */
     lpAssertValidEntry(lp, lpBytes(lp), p);
     return p;
@@ -534,6 +538,7 @@ unsigned char *lpLast(unsigned char *lp) {
  * needed. As a side effect of calling this function, the listpack header
  * could be modified, because if the count is found to be already within
  * the 'numele' header field range, the new value is set. */
+// listpack中元素的个数
 unsigned long lpLength(unsigned char *lp) {
     uint32_t numele = lpGetNumElements(lp);
     if (numele != LP_HDR_NUMELE_UNKNOWN) return numele;
@@ -589,6 +594,12 @@ unsigned long lpLength(unsigned char *lp) {
  *
  * Similarly, there is no error returned since the listpack normally can be
  * assumed to be valid, so that would be a very high API cost. */
+// 几个参数说明
+// p: 指向entry的指针
+// 如果是字符串：count: 字符串的长度，intbuf: 没用到，entry_size: 整个p的长度，包括backlen
+// 如果是整数并且intbuf!=NULL count: intbuf代表的字符串型数字的长度，intbuf: 数字转成的字符串，entry_size: 整个p的长度，包括backlen
+// 如果是整数并且intbuf==NULL count: 整数的值，intbuf: NULL，没用，entry_size: 整个p的长度，包括backlen
+// 返回NULL的情况：intbuf为空，且entry是整数，此时count就是整数的值
 static inline unsigned char *lpGetWithSize(unsigned char *p, int64_t *count, unsigned char *intbuf, uint64_t *entry_size) {
     int64_t val;
     uint64_t uval, negstart, negmax;
@@ -688,6 +699,7 @@ unsigned char *lpGet(unsigned char *p, int64_t *count, unsigned char *intbuf) {
  * Otherwise if the element is encoded as a string a pointer to the string (pointing
  * inside the listpack itself) is returned, and 'slen' is set to the length of the
  * string. */
+// 获取p处元素的值，如果是str，就返回str的指针，slen被赋值为str的长度，如果是int，返回NULL，int值被赋值到lval
 unsigned char *lpGetValue(unsigned char *p, unsigned int *slen, long long *lval) {
     unsigned char *vstr;
     int64_t ele_len;
@@ -760,6 +772,7 @@ unsigned char *lpFind(unsigned char *lp, unsigned char *p, unsigned char *s,
         /* The next call to lpGetWithSize could read at most 8 bytes past `p`
          * We use the slower validation call only when necessary. */
         if (p + 8 >= lp + lp_bytes)
+            // ZZJ 这个校验更慢，所以只在p快到最后的时候才校验
             lpAssertValidEntry(lp, lp_bytes, p);
         else
             assert(p >= lp + LP_HDR_SIZE && p < lp + lp_bytes);
@@ -797,9 +810,14 @@ unsigned char *lpFind(unsigned char *lp, unsigned char *p, unsigned char *s,
  * For deletion operations (both 'elestr' and 'eleint' set to NULL) 'newp' is
  * set to the next element, on the right of the deleted one, or to NULL if the
  * deleted element was the last one. */
+// 参数：
+// lp: listpack, elestr: 需要更新的字符串, eleint: 需要更新的字符串表示的int, size: 前面两个参数的size
+// p: 要插入和删除的位置, where: 插入or替换, newp: 插入或替换位置的后一个元素
 unsigned char *lpInsert(unsigned char *lp, unsigned char *elestr, unsigned char *eleint,
                         uint32_t size, unsigned char *p, int where, unsigned char **newp)
 {
+    // LP_MAX_INT_ENCODING_LEN=9，和lpEncodeIntegerGetType设置的enclen最大值是一样的，可以看下lpEncodeIntegerGetType的逻辑
+    // intenc里存的就是整数值，因为第一字节是头部信息，后面8字节表示数字，也就是最大表示64位的数字
     unsigned char intenc[LP_MAX_INT_ENCODING_LEN];
     unsigned char backlen[LP_MAX_BACKLEN_SIZE];
 
@@ -887,6 +905,7 @@ unsigned char *lpInsert(unsigned char *lp, unsigned char *elestr, unsigned char 
     }
 
     /* Realloc after: we need to free space. */
+    // new比old需要的空间小，也realloc一下，这样可以释放内存
     if (new_listpack_bytes < old_listpack_bytes) {
         if ((lp = lp_realloc(lp,new_listpack_bytes)) == NULL) return NULL;
         dst = lp + poff;
@@ -901,6 +920,8 @@ unsigned char *lpInsert(unsigned char *lp, unsigned char *elestr, unsigned char 
     }
     if (!delete) {
         if (enctype == LP_ENCODING_INT) {
+            // 如果eleint有值，eleint就是已经编码好的整数值
+            // 如果eleint没有值，但是elestr是数值型的，上面有一步也会把eleint赋值为编码好的整数值
             memcpy(dst,eleint,enclen);
         } else if (elestr) {
             lpEncodeString(dst,elestr,size);
@@ -1190,6 +1211,7 @@ unsigned char *lpMerge(unsigned char **first, unsigned char **second) {
     unsigned long lplength = first_len + second_len;
 
     /* Combined lp length should be limited within UINT16_MAX */
+    // ZZJ 如果>=65535，则存65535(因为只用了16个字节表示元素个数)，如果elelen=65535，则存的长度不可用
     lplength = lplength < UINT16_MAX ? lplength : UINT16_MAX;
 
     /* Extend target to new lpbytes then append or prepend source. */
@@ -1300,6 +1322,7 @@ unsigned char *lpSeek(unsigned char *lp, long index) {
 }
 
 /* Same as lpFirst but without validation assert, to be used right before lpValidateNext. */
+// ZZJ 已看
 unsigned char *lpValidateFirst(unsigned char *lp) {
     unsigned char *p = lp + LP_HDR_SIZE; /* Skip the header. */
     if (p[0] == LP_EOF) return NULL;
@@ -1309,6 +1332,7 @@ unsigned char *lpValidateFirst(unsigned char *lp) {
 /* Validate the integrity of a single listpack entry and move to the next one.
  * The input argument 'pp' is a reference to the current record and is advanced on exit.
  * Returns 1 if valid, 0 if invalid. */
+// ZZJ 已看，校验pp这个元素是不是在lp的范围内，如果在，返回时pp指向下一个元素
 int lpValidateNext(unsigned char *lp, unsigned char **pp, size_t lpbytes) {
 #define OUT_OF_RANGE(p) ( \
         (p) < lp + LP_HDR_SIZE || \
@@ -1358,6 +1382,7 @@ int lpValidateNext(unsigned char *lp, unsigned char **pp, size_t lpbytes) {
 }
 
 /* Validate that the entry doesn't reach outside the listpack allocation. */
+// ZZJ 已看
 static inline void lpAssertValidEntry(unsigned char* lp, size_t lpbytes, unsigned char *p) {
     assert(lpValidateNext(lp, &p, lpbytes));
 }
@@ -1365,6 +1390,7 @@ static inline void lpAssertValidEntry(unsigned char* lp, size_t lpbytes, unsigne
 /* Validate the integrity of the data structure.
  * when `deep` is 0, only the integrity of the header is validated.
  * when `deep` is 1, we scan all the entries one by one. */
+// ZZJ 已看
 int lpValidateIntegrity(unsigned char *lp, size_t size, int deep, 
                         listpackValidateEntryCB entry_cb, void *cb_userdata) {
     /* Check that we can actually read the header. (and EOF) */
@@ -1542,6 +1568,9 @@ void lpRandomPairs(unsigned char *lp, unsigned int count, listpackEntry *keys, l
         key = lpGetValue(p, &klen, &klval);
         assert((p = lpNext(lp, p)));
         value = lpGetValue(p, &vlen, &vlval);
+        // 这里的while应该是考虑picks接连有几个元素都是=picks[pickindex].index，避免多次去从lp获取元素
+        // 感觉这里的有点奇怪，需要优化下。
+        // 这里的while循环没问题，因为前面根据pick[i].index排序了，所以index总是增加的
         while (pickindex < count && lpindex == picks[pickindex].index) {
             int storeorder = picks[pickindex].order;
             lpSaveValue(key, klen, klval, &keys[storeorder]);
@@ -1549,6 +1578,8 @@ void lpRandomPairs(unsigned char *lp, unsigned int count, listpackEntry *keys, l
                 lpSaveValue(value, vlen, vlval, &vals[storeorder]);
              pickindex++;
         }
+        // 这里是先指向下一个元素，但是下一个元素不一定在index中，上面的while会判断lpindex == picks[pickindex].index
+        // 如果lpindex == picks[pickindex].index不满足，又会走到这里，继续跳到下一个判断
         lpindex += 2;
         p = lpNext(lp, p);
     }
@@ -1615,6 +1646,10 @@ unsigned int lpRandomPairsUnique(unsigned char *lp, unsigned int count, listpack
  *         i++;
  *     }
  */
+// 从lpLength(lp)-i（=available）中选随机选一个元素
+// 选择思路：因为总共需要选remaining个元素，而现在有available个可选，所以每个元素被选中的概率是remaining/available
+// 然后从i开始向后遍历，每遍历到一个元素，就生成一个随机数，判断随机数是否<=remaining/available，因为随机数小于等于remaining/available的概率就是remaining/available
+// 所以当前i这个元素是否被选的概率也就是remaining/available
 unsigned char *lpNextRandom(unsigned char *lp, unsigned char *p, unsigned int *index,
                             unsigned int remaining, int even_only)
 {
@@ -1622,19 +1657,28 @@ unsigned char *lpNextRandom(unsigned char *lp, unsigned char *p, unsigned int *i
      * we pick it is the quotient of the count left we want to pick and the
      * count still we haven't visited. This way, we could make every member be
      * equally likely to be picked. */
+    // 初始p=lp[0] index=0 remaining=5 even_only=1(只选奇数的index)
     unsigned int i = *index;
     unsigned int total_size = lpLength(lp);
+    // 初始i=0, total_size=5
     while (i < total_size && p != NULL) {
+        // 只取偶数(even_only)，如果i是奇数，则跳过当前的p，找到下一个i为偶数的
+        // 初始i=0，这个if不会执行
         if (even_only && i % 2 != 0) {
             p = lpNext(lp, p);
             i++;
             continue;
         }
+        // 走到这里，i是偶数(0, 2, 4...)，p=lp[i]
 
         /* Do we pick this element? */
+        // available=5-0=5
         unsigned int available = total_size - i;
-        if (even_only) available /= 2;
+        if (even_only) available /= 2; // 如果只取偶数，even_only=5/2=2
+        // rand()取值是[0,RAND_MAX]，所以转成double，取值就是[0,1]
         double randomDouble = ((double)rand()) / RAND_MAX;
+        // threshold也是小于等于1的，因为remaining不会大于available
+        // 因为初始remaining肯定小于等于available（传参控制），后面每次找到数据，remaining会减少，available也会减少。
         double threshold = ((double)remaining) / available;
         if (randomDouble <= threshold) {
             *index = i;

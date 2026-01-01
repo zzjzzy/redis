@@ -43,9 +43,19 @@
 #define REDIS_STATIC static
 #endif
 
+/*
+ * quicklist结构总结
+ * 1. 是一个双向链表，有head tail，head, tail是quicklistNode结构
+ * 2. 一个quicklistNode其实是一个listpack，quicklistNode.entry指向的就是listpack
+ * 3. 其他字段含义见结构体定义的注释
+ * */
+
 /* Optimization levels for size-based filling.
  * Note that the largest possible limit is 64k, so even if each record takes
  * just one byte, it still won't overflow the 16 bit count field. */
+// optimization_level里的数量代表的是listpack占用的空间大小，所以上面注释的意思是，即使listpack中每个元素只占用一个字节，
+// 那在65536(64kb)空间大小的限制下，listpack中元素个数也不会>=64kb(lp还有头部信息)，也就不会超过quicklistNode.count的16位能表示的最大值
+// 可以看下quicklistNodeLimit，有用到这个常量
 static const size_t optimization_level[] = {4096, 8192, 16384, 32768, 65536};
 
 /* packed_threshold is initialized to 1gb*/
@@ -70,6 +80,7 @@ int quicklistisSetPackedThreshold(size_t sz) {
  * This is used only if we're limited by record count. when we're limited by
  * size, the maximum limit is bigger, but still safe.
  * 8k is a recommended / default size limit */
+// 这个表示的是quicklistNode.entry的listpack的空间大小限制
 #define SIZE_SAFETY_LIMIT 8192
 
 /* Maximum estimate of the listpack entry overhead.
@@ -468,6 +479,11 @@ void quicklistNodeLimit(int fill, size_t *size, unsigned int *count) {
     *size = SIZE_MAX;
     *count = UINT_MAX;
 
+    // 这里fill应该是用正负表示用optimization_level的值，还是调用者传过来的值
+    // 如果fill>=0，就直接用这个值作为count，如果fill<0，fill代表的是optimization_level的数组索引
+    // 如果fill>=0，设置的是count的值，size用SIZE_MAX这个默认值
+    // 如果fill<0，设置的是size，coupon用UINT_MAX这个默认值
+    // count是quickListNode中lp的元素数量？size是quickListNode中lp的占用空间大小？
     if (fill >= 0) {
         /* Ensure that one node have at least one entry */
         *count = (fill == 0) ? 1 : fill;
@@ -488,6 +504,8 @@ int quicklistNodeExceedsLimit(int fill, size_t new_sz, unsigned int new_count) {
     unsigned int count_limit;
     quicklistNodeLimit(fill, &sz_limit, &count_limit);
 
+    // fill应该是用来指定现在size还是限制count，如果fill>=0，count被赋值，走到的就是else分支，判断的是new_count是否超限
+    // 如果fill<0，size被赋值，走到的是if分支，校验的是new_size是否超限
     if (likely(sz_limit != SIZE_MAX)) {
         return new_sz > sz_limit;
     } else if (count_limit != UINT_MAX) {
@@ -571,6 +589,7 @@ int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
     quicklistNode *orig_head = quicklist->head;
 
     if (unlikely(isLargeElement(sz))) {
+        // 如果value值比较大，不创建listpack，直接保存原始值
         __quicklistInsertPlainNode(quicklist, quicklist->head, value, sz, 0);
         return 1;
     }
@@ -584,6 +603,7 @@ int quicklistPushHead(quicklist *quicklist, void *value, size_t sz) {
         node->entry = lpPrepend(lpNew(0), value, sz);
 
         quicklistNodeUpdateSz(node);
+        // 新节点插入到头部，因为新数据更可能是热点数据
         _quicklistInsertNodeBefore(quicklist, quicklist->head, node);
     }
     quicklist->count++;
@@ -1741,6 +1761,7 @@ int quicklistBookmarkDelete(quicklist *ql, const char *name) {
     return 1;
 }
 
+// 已看
 quicklistBookmark *_quicklistBookmarkFindByName(quicklist *ql, const char *name) {
     unsigned i;
     for (i=0; i<ql->bookmark_count; i++) {
@@ -1751,6 +1772,7 @@ quicklistBookmark *_quicklistBookmarkFindByName(quicklist *ql, const char *name)
     return NULL;
 }
 
+// 已看
 quicklistBookmark *_quicklistBookmarkFindByNode(quicklist *ql, quicklistNode *node) {
     unsigned i;
     for (i=0; i<ql->bookmark_count; i++) {
@@ -1761,15 +1783,18 @@ quicklistBookmark *_quicklistBookmarkFindByNode(quicklist *ql, quicklistNode *no
     return NULL;
 }
 
+// 已看
 void _quicklistBookmarkDelete(quicklist *ql, quicklistBookmark *bm) {
     int index = bm - ql->bookmarks;
     zfree(bm->name);
     ql->bookmark_count--;
+    // 注意上面已经bookmark_count--了，所以第三个参数计算的没错，不需要减1
     memmove(bm, bm+1, (ql->bookmark_count - index)* sizeof(*bm));
     /* NOTE: We do not shrink (realloc) the quicklist yet (to avoid resonance,
      * it may be re-used later (a call to realloc may NOP). */
 }
 
+// 已看
 void quicklistBookmarksClear(quicklist *ql) {
     while (ql->bookmark_count)
         zfree(ql->bookmarks[--ql->bookmark_count].name);
