@@ -129,19 +129,32 @@ typedef struct quicklist {
 
 typedef struct quicklistIter {
     quicklist *quicklist;
+    // 当前的node，也就是当前的listpack
     quicklistNode *current;
+    // 这个是current.listpack[offset]的指针，指向listpack的某个元素
     unsigned char *zi; /* points to the current element */
+    // 当前遍历到的listpack的索引，如果是从后向前遍历，offset是负数
     long offset; /* offset in current listpack */
     int direction;
 } quicklistIter;
 
+// 在quicklistIter中使用
+// 这个结构体的字段含义可以看下quicklist.c的quicklistNext方法
 typedef struct quicklistEntry {
     const quicklist *quicklist;
     quicklistNode *node;
+    // 指向node.listpack[offset]元素的指针
+    // 如果node.entry是plain的，则是直接指向entry的指针
     unsigned char *zi;
+    // node.listpack[offset].value，如果是整数值，value=NULL,longval有值
     unsigned char *value;
+    // 这个是listpack中整数类型的值
+    // 是通过lpGetValue获取的
     long long longval;
+    // value的大小，也就是listpack一个字符串长度，如果是longval，此值无意义
+    // 注意这个不是listpack的长度，也不是listpack某个元素的总长度
     size_t sz;
+    // node.listpack的元素偏移量
     int offset;
 } quicklistEntry;
 
