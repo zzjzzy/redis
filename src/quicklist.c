@@ -776,7 +776,6 @@ void quicklistDelEntry(quicklistIter *iter, quicklistEntry *entry) {
 }
 
 /* Replace quicklist entry by 'data' with length 'sz'. */
-// ZZJ TODO 还没完全梳理清楚，后面的看完再回来看一遍
 void quicklistReplaceEntry(quicklistIter *iter, quicklistEntry *entry,
                            void *data, size_t sz)
 {
@@ -787,26 +786,37 @@ void quicklistReplaceEntry(quicklistIter *iter, quicklistEntry *entry,
     if (likely(!QL_NODE_IS_PLAIN(entry->node) && !isLargeElement(sz) &&
         (newentry = lpReplace(entry->node->entry, &entry->zi, data, sz)) != NULL))
     {
+        // data是一个可插入的lp元素，直接插入当前quicklistNode.listpack中
         entry->node->entry = newentry;
         quicklistNodeUpdateSz(entry->node);
         /* quicklistNext() and quicklistGetIteratorEntryAtIdx() provide an uncompressed node */
         quicklistCompress(quicklist, entry->node);
     } else if (QL_NODE_IS_PLAIN(entry->node)) {
         if (isLargeElement(sz)) {
+            // 如果node是plaine并且replace的data也是plain，则释放原来的node.entry值，替换成data的值
             zfree(entry->node->entry);
             entry->node->entry = zmalloc(sz);
             entry->node->sz = sz;
             memcpy(entry->node->entry, data, sz);
             quicklistCompress(quicklist, entry->node);
         } else {
+            // 由于node.entry是plain的，所以只能插入到当前node的后面
             quicklistInsertAfter(iter, entry, data, sz);
+            // 因为是replace，所以要删除entry.node
             __quicklistDelNode(quicklist, entry->node);
         }
     } else { /* The node is full or data is a large element */
+        // 前面两个分支已经考虑了以下情况
+        // 1. entry.node是plain
+        // 2. entry.node不是plain 且 sz不是large 且 lpReplace能成功
+        // 所以这个分支的情况是
+        // 1. entry.node不是plain 且 （sz是large 或 sz不是large但是lpReplace失败）
         quicklistNode *split_node = NULL, *new_node;
         node->dont_compress = 1; /* Prevent compression in __quicklistInsertNode() */
 
         /* If the entry is not at the tail, split the node at the entry's offset. */
+        // split node，以便后面进行插入
+        // _quicklistSplitNode返回值：split_node=node[offset+1, end], node.entry=[0,offset]
         if (entry->offset != node->count - 1 && entry->offset != -1)
             split_node = _quicklistSplitNode(node, entry->offset, 1);
 
@@ -815,16 +825,20 @@ void quicklistReplaceEntry(quicklistIter *iter, quicklistEntry *entry,
         new_node = __quicklistCreateNode(isLargeElement(sz) ?
             QUICKLIST_NODE_CONTAINER_PLAIN : QUICKLIST_NODE_CONTAINER_PACKED, data, sz);
         __quicklistInsertNode(quicklist, node, new_node, 1);
+        // 如果split成功，需要在new_node后面拼接上split的后半部分，也就是node.entry[offset+1, end]
         if (split_node) __quicklistInsertNode(quicklist, new_node, split_node, 1);
         quicklist->count++;
 
         /* Delete the replaced element. */
+        // 前面只是插入了新元素，需要把旧元素删除
         if (entry->node->count == 1) {
             __quicklistDelNode(quicklist, entry->node);
         } else {
             unsigned char *p = lpSeek(entry->node->entry, -1);
+            // 因为前面已经split了，所以现在node.entry(listpack)的最后一个元素就是要删除的元素
             quicklistDelIndex(quicklist, entry->node, &p);
             entry->node->dont_compress = 0; /* Re-enable compression */
+            // 因为前面split node了，所以这里merge下，避免有小node
             new_node = _quicklistMergeNodes(quicklist, new_node);
             /* We can't know if the current node and its sibling nodes are correctly compressed,
              * and we don't know if they are within the range of compress depth, so we need to

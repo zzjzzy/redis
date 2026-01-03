@@ -15,7 +15,7 @@ skiplist(zset的底层实现(大对象)) 不用看（在t_zset中实现的，直
 adlist.c（被listpack替代） 看完了
 listpack（替代ziplist） 看完了
 ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
-quicklist(adlist+listpack的混合,list的唯一实现) 看完了【quicklistReplaceEntry没完全看明白，需要再看下】
+quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 
 ===== t系列 =====
 t_hash
