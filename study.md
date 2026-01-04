@@ -41,7 +41,8 @@ t_stream
 
 ===== 其他 =====
 object.c  【Memory introspection】以上都看完了，其他部分等用到了再看。
-server.c dictType
+server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 看到dbDictEntryMetadataSize
+server.c client
 server.c zset
 server.c typedef struct RedisModuleType
 rax(STREAM 的核心)

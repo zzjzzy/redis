@@ -337,6 +337,7 @@ unsigned long LFUDecrAndReturn(robj *o) {
  * massive eviction loop, even all keys are evicted.
  *
  * This function returns the sum of AOF and replication buffer. */
+// 还没看
 size_t freeMemoryGetNotCountedMemory(void) {
     size_t overhead = 0;
 
@@ -439,6 +440,7 @@ int getMaxmemoryState(size_t *total, size_t *logical, size_t *tofree, float *lev
 /* Return 1 if used memory is more than maxmemory after allocating more memory,
  * return 0 if not. Redis may reject user's requests or evict some keys if used
  * memory exceeds maxmemory, especially, when we allocate huge memory at once. */
+// 已看
 int overMaxmemoryAfterAlloc(size_t moremem) {
     if (!server.maxmemory) return  0; /* No limit. */
 

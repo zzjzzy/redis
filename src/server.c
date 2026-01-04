@@ -245,7 +245,7 @@ void exitFromChild(int retcode) {
 /* This is a hash table type that uses the SDS dynamic strings library as
  * keys and redis objects as values (objects can hold SDS strings,
  * lists, sets). */
-// 正在看（看到Cron: called every 100 ms）
+// 已看
 void dictVanillaFree(dict *d, void *val)
 {
     UNUSED(d);
@@ -357,6 +357,7 @@ int dictEncObjKeyCompare(dict *d, const void *key1, const void *key2)
      * good reasons, because it would incrRefCount() the object, which
      * is invalid. So we check to make sure dictFind() works with static
      * objects as well. */
+    // getDecodedObject有可能返回原obj，也可能返回新的obj
     if (o1->refcount != OBJ_STATIC_REFCOUNT) o1 = getDecodedObject(o1);
     if (o2->refcount != OBJ_STATIC_REFCOUNT) o2 = getDecodedObject(o2);
     cmp = dictSdsKeyCompare(d,o1->ptr,o2->ptr);
