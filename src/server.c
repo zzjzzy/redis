@@ -189,6 +189,7 @@ err:
 }
 
 /* Return the UNIX time in microseconds */
+// 已看
 long long ustime(void) {
     struct timeval tv;
     long long ust;
@@ -200,6 +201,7 @@ long long ustime(void) {
 }
 
 /* Return the UNIX time in milliseconds */
+// 已看
 mstime_t mstime(void) {
     return ustime()/1000;
 }
@@ -243,7 +245,7 @@ void exitFromChild(int retcode) {
 /* This is a hash table type that uses the SDS dynamic strings library as
  * keys and redis objects as values (objects can hold SDS strings,
  * lists, sets). */
-
+// 正在看（看到Cron: called every 100 ms）
 void dictVanillaFree(dict *d, void *val)
 {
     UNUSED(d);
@@ -580,6 +582,7 @@ dictType externalStringType = {
 
 /* Dict for case-insensitive search using sds objects with a zmalloc
  * allocated object as the value. */
+// 正在看
 dictType sdsHashDictType = {
     dictSdsCaseHash,            /* hash function */
     NULL,                       /* key dup */
@@ -1966,7 +1969,7 @@ void createSharedObjects(void) {
 
     for (j = 0; j < OBJ_SHARED_INTEGERS; j++) {
         shared.integers[j] =
-            makeObjectShared(createObject(OBJ_STRING,(void*)(long)j));
+            makeObjectShared(createObject(OBJ_STRING,(void*)(long)j)); // 这里是把j转成了指针存储，实际上不是有效的指针
         initObjectLRUOrLFU(shared.integers[j]);
         shared.integers[j]->encoding = OBJ_ENCODING_INT;
     }
@@ -2007,8 +2010,10 @@ void freeServerClientMemUsageBuckets(void) {
     server.client_mem_usage_buckets = NULL;
 }
 
+// 正在看
 void initServerConfig(void) {
     int j;
+    // 默认绑定的地址{ "*", "-::*" }，*表示所有ipv4地址，-::*表示所有ipv6地址
     char *default_bindaddr[CONFIG_DEFAULT_BINDADDR_COUNT] = CONFIG_DEFAULT_BINDADDR;
 
     initConfigValues();
@@ -6684,6 +6689,7 @@ void sendChildInfo(childInfoType info_type, size_t keys, char *pname) {
  * Also please note that the size may be not accurate, so in order to make this
  * solution effective, the judgement for releasing memory pages should not be
  * too strict. */
+// 已看，这个先不深入研究了，知道是为了避免写时复制就行
 void dismissMemory(void* ptr, size_t size_hint) {
     if (ptr == NULL) return;
 
@@ -6761,6 +6767,7 @@ void memtest(size_t megabytes, int passes);
 
 /* Returns 1 if there is --sentinel among the arguments or if
  * executable name contains "redis-sentinel". */
+// 已看
 int checkForSentinelMode(int argc, char **argv, char *exec_name) {
     if (strstr(exec_name,"redis-sentinel") != NULL) return 1;
 
@@ -7093,11 +7100,13 @@ int main(int argc, char **argv) {
 #ifdef INIT_SETPROCTITLE_REPLACEMENT
     spt_init(argc, argv);
 #endif
+    // 设置时区
     tzset(); /* Populates 'timezone' global. */
     zmalloc_set_oom_handler(redisOutOfMemoryHandler);
 
     /* To achieve entropy, in case of containers, their time() and getpid() can
      * be the same. But value of tv_usec is fast enough to make the difference */
+    // 初始化随机数种子
     gettimeofday(&tv,NULL);
     srand(time(NULL)^getpid()^tv.tv_usec);
     srandom(time(NULL)^getpid()^tv.tv_usec);
@@ -7112,10 +7121,13 @@ int main(int argc, char **argv) {
 
     uint8_t hashseed[16];
     getRandomBytes(hashseed,sizeof(hashseed));
+    // hash的随机种子，用于计算hash值
     dictSetHashFunctionSeed(hashseed);
 
+    // 查询argv[0] /的最后一个值，也就是可执行文件的名字
     char *exec_name = strrchr(argv[0], '/');
     if (exec_name == NULL) exec_name = argv[0];
+    // 判断是否是sentinel模式启动
     server.sentinel_mode = checkForSentinelMode(argc,argv, exec_name);
     initServerConfig();
     ACLInit(); /* The ACL subsystem must be initialized ASAP because the

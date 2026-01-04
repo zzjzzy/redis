@@ -84,6 +84,12 @@ typedef struct dictType {
 struct dict {
     dictType *type;
 
+    // ht_table是两个元素是数据，是dictEntry **的结构
+    // 不能只是dictEntry *结构，因为dictEntry *只能表示一维数组，ht_table需要表示数组+链表的二维数组
+    // ht_table结构是如下
+    // ht_table[0] -> dictEntry**(0x1000)   -->   |dictEntry*(0x2000)|dictEntry*(0x3000)|dictEntry*(0x4000)|
+    //                                                   ↓                  ↓                  ↓
+    //                                             dictEntry*(0x2001)
     dictEntry **ht_table[2];
     unsigned long ht_used[2];
 

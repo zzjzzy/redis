@@ -3285,6 +3285,7 @@ int registerConfigValue(const char *name, const standardConfig *config, int alia
 
 /* Initialize configs to their default values and create and populate the 
  * runtime configuration dictionary. */
+// 正在看
 void initConfigValues(void) {
     configs = dictCreate(&sdsHashDictType);
     dictExpand(configs, sizeof(static_configs) / sizeof(standardConfig));

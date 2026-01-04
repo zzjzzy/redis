@@ -518,6 +518,7 @@ typedef enum {
 #define SUPERVISED_UPSTART 3
 
 /* Anti-warning macro... */
+// 这个是为了避免编译器警告函数参数未使用
 #define UNUSED(V) ((void) V)
 
 #define ZSKIPLIST_MAXLEVEL 32 /* Should be enough for 2^64 elements */
@@ -561,9 +562,11 @@ typedef enum {
 /* Redis maxmemory strategies. Instead of using just incremental number
  * for this defines, we use a set of flags so that testing for certain
  * properties common to multiple policies is faster. */
+// 内存超限后的淘汰策略
 #define MAXMEMORY_FLAG_LRU (1<<0)
 #define MAXMEMORY_FLAG_LFU (1<<1)
 #define MAXMEMORY_FLAG_ALLKEYS (1<<2)
+// 不使用缓存的integers
 #define MAXMEMORY_FLAG_NO_SHARED_INTEGERS \
     (MAXMEMORY_FLAG_LRU|MAXMEMORY_FLAG_LFU)
 
@@ -894,11 +897,14 @@ struct RedisModuleDigest {
 #define LRU_CLOCK_MAX ((1<<LRU_BITS)-1) /* Max value of obj->lru */
 #define LRU_CLOCK_RESOLUTION 1000 /* LRU clock resolution in ms */
 
+// 用int_max表示当前robj是全局引用对象，不会被释放
 #define OBJ_SHARED_REFCOUNT INT_MAX     /* Global object never destroyed. */
 #define OBJ_STATIC_REFCOUNT (INT_MAX-1) /* Object allocated in the stack. */
 #define OBJ_FIRST_SPECIAL_REFCOUNT OBJ_STATIC_REFCOUNT
 struct redisObject {
+    // String, Set, Hash等
     unsigned type:4;
+    // 比如Set底层可能是用dict实现的，也可能是intset实现的，encoding用来指定底层编码
     unsigned encoding:4;
     unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
                             * LFU data (least significant 8 bits frequency

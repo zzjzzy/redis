@@ -39,7 +39,7 @@
 #endif
 
 /* ===================== Creation and parsing of objects ==================== */
-
+// 已看
 robj *createObject(int type, void *ptr) {
     robj *o = zmalloc(sizeof(*o));
     o->type = type;
@@ -50,11 +50,13 @@ robj *createObject(int type, void *ptr) {
     return o;
 }
 
+// 已看
 void initObjectLRUOrLFU(robj *o) {
     if (o->refcount == OBJ_SHARED_REFCOUNT)
         return;
     /* Set the LRU to the current lruclock (minutes resolution), or
      * alternatively the LFU counter. */
+    // 如果是用的LFU策略，就按照LFU赋值
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
         o->lru = (LFUGetTimeInMinutes() << 8) | LFU_INIT_VAL;
     } else {
@@ -74,6 +76,7 @@ void initObjectLRUOrLFU(robj *o) {
  * robj *myobject = makeObjectShared(createObject(...));
  *
  */
+// 已看
 robj *makeObjectShared(robj *o) {
     serverAssert(o->refcount == 1);
     o->refcount = OBJ_SHARED_REFCOUNT;
@@ -82,6 +85,7 @@ robj *makeObjectShared(robj *o) {
 
 /* Create a string object with encoding OBJ_ENCODING_RAW, that is a plain
  * string object where o->ptr points to a proper sds string. */
+// 已看
 robj *createRawStringObject(const char *ptr, size_t len) {
     return createObject(OBJ_STRING, sdsnewlen(ptr,len));
 }
@@ -89,8 +93,10 @@ robj *createRawStringObject(const char *ptr, size_t len) {
 /* Create a string object with encoding OBJ_ENCODING_EMBSTR, that is
  * an object where the sds string is actually an unmodifiable string
  * allocated in the same chunk as the object itself. */
+// 已看，创建一个string obj，string是直接接在obj后面
 robj *createEmbeddedStringObject(const char *ptr, size_t len) {
     robj *o = zmalloc(sizeof(robj)+sizeof(struct sdshdr8)+len+1);
+
     struct sdshdr8 *sh = (void*)(o+1);
 
     o->type = OBJ_STRING;
@@ -119,6 +125,7 @@ robj *createEmbeddedStringObject(const char *ptr, size_t len) {
  *
  * The current limit of 44 is chosen so that the biggest string object
  * we allocate as EMBSTR will still fit into the 64 byte arena of jemalloc. */
+// 已看
 #define OBJ_ENCODING_EMBSTR_SIZE_LIMIT 44
 robj *createStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
@@ -128,6 +135,7 @@ robj *createStringObject(const char *ptr, size_t len) {
 }
 
 /* Same as CreateRawStringObject, can return NULL if allocation fails */
+// 已看
 robj *tryCreateRawStringObject(const char *ptr, size_t len) {
     sds str = sdstrynewlen(ptr,len);
     if (!str) return NULL;
@@ -135,6 +143,7 @@ robj *tryCreateRawStringObject(const char *ptr, size_t len) {
 }
 
 /* Same as createStringObject, can return NULL if allocation fails */
+// 已看
 robj *tryCreateStringObject(const char *ptr, size_t len) {
     if (len <= OBJ_ENCODING_EMBSTR_SIZE_LIMIT)
         return createEmbeddedStringObject(ptr,len);
@@ -146,12 +155,16 @@ robj *tryCreateStringObject(const char *ptr, size_t len) {
 #define LL2STROBJ_AUTO 0       /* automatically create the optimal string object */
 #define LL2STROBJ_NO_SHARED 1  /* disallow shared objects */
 #define LL2STROBJ_NO_INT_ENC 2 /* disallow integer encoded objects. */
+// 已看
 robj *createStringObjectFromLongLongWithOptions(long long value, int flag) {
     robj *o;
 
     if (value >= 0 && value < OBJ_SHARED_INTEGERS && flag == LL2STROBJ_AUTO) {
+        // 使用缓存的obj
+        // sharedObj是在server.c createSharedObjects中创建的
         o = shared.integers[value];
     } else {
+        // LL2STROBJ_NO_INT_ENC是禁止int类型encode，也就是要用str编码，这里判断flag!=LL2STROBJ_NO_INT_ENC，也就是可以使用int编码
         if ((value >= LONG_MIN && value <= LONG_MAX) && flag != LL2STROBJ_NO_INT_ENC) {
             o = createObject(OBJ_STRING, NULL);
             o->encoding = OBJ_ENCODING_INT;
@@ -167,6 +180,7 @@ robj *createStringObjectFromLongLongWithOptions(long long value, int flag) {
 
 /* Wrapper for createStringObjectFromLongLongWithOptions() always demanding
  * to create a shared object if possible. */
+// 已看
 robj *createStringObjectFromLongLong(long long value) {
     return createStringObjectFromLongLongWithOptions(value, LL2STROBJ_AUTO);
 }
@@ -176,9 +190,13 @@ robj *createStringObjectFromLongLong(long long value) {
  * space(for instance when the INCR command is used), and Redis is
  * configured to evict based on LFU/LRU, so we want LFU/LRU values
  * specific for each key. */
+// ZZJ TODO 上面这个注释没太看懂，为什么有淘汰策略就不能使用共享对象？一开始理解是有淘汰策略，共享对象可能会被删除，
+// 但是就算有淘汰策略，共享对象也不会被随意删除吧？因为共享对象是全局共享的
+// 已看
 robj *createStringObjectFromLongLongForValue(long long value) {
     if (server.maxmemory == 0 || !(server.maxmemory_policy & MAXMEMORY_FLAG_NO_SHARED_INTEGERS)) {
         /* If the maxmemory policy permits, we can still return shared integers */
+        // 没有设置内存限制和淘汰策略，可以创建shared obj，感觉上面这句注释不太对。
         return createStringObjectFromLongLongWithOptions(value, LL2STROBJ_AUTO);
     } else {
         return createStringObjectFromLongLongWithOptions(value, LL2STROBJ_NO_SHARED);
@@ -187,6 +205,8 @@ robj *createStringObjectFromLongLongForValue(long long value) {
 
 /* Create a string object that contains an sds inside it. That means it can't be
  * integer encoded (OBJ_ENCODING_INT), and it'll always be an EMBSTR type. */
+// 已看，【and it'll always be an EMBSTR type.】这就话的意思是他始终是一个内嵌字符串，因为<=44会被内嵌，long long转成字符串总是小于44
+// 参考#define LONG_STR_SIZE      21 （long转成字符串最多占用21长度）
 robj *createStringObjectFromLongLongWithSds(long long value) {
     return createStringObjectFromLongLongWithOptions(value, LL2STROBJ_NO_INT_ENC);
 }
@@ -197,6 +217,7 @@ robj *createStringObjectFromLongLongWithSds(long long value) {
  * and the output of snprintf() is not modified.
  *
  * The 'humanfriendly' option is used for INCRBYFLOAT and HINCRBYFLOAT. */
+// 已看
 robj *createStringObjectFromLongDouble(long double value, int humanfriendly) {
     char buf[MAX_LONG_DOUBLE_CHARS];
     int len = ld2string(buf,sizeof(buf),value,humanfriendly? LD_STR_HUMAN: LD_STR_AUTO);
@@ -211,6 +232,7 @@ robj *createStringObjectFromLongDouble(long double value, int humanfriendly) {
  * will always result in a fresh object that is unshared (refcount == 1).
  *
  * The resulting object always has refcount set to 1. */
+// 已看
 robj *dupStringObject(const robj *o) {
     robj *d;
 
@@ -222,6 +244,7 @@ robj *dupStringObject(const robj *o) {
     case OBJ_ENCODING_EMBSTR:
         return createEmbeddedStringObject(o->ptr,sdslen(o->ptr));
     case OBJ_ENCODING_INT:
+        // OBJ_ENCODING_INT是，d.ptr处存的就是int值，虽然看类型d.ptr是指针
         d = createObject(OBJ_STRING, NULL);
         d->encoding = OBJ_ENCODING_INT;
         d->ptr = o->ptr;
@@ -456,6 +479,7 @@ void dismissSetObject(robj *o, size_t size_hint) {
             dictEntry *de;
             dictIterator *di = dictGetIterator(set);
             while ((de = dictNext(di)) != NULL) {
+                // 因为set只有key，所以只dismiss key
                 dismissSds(dictGetKey(de));
             }
             dictReleaseIterator(di);
@@ -561,6 +585,7 @@ void dismissStreamObject(robj *o, size_t size_hint) {
  * 'size_hint' is the size of serialized value. This method is not accurate, but
  * it can reduce unnecessary iteration for complex data types that are probably
  * not going to release any memory. */
+// 已看
 void dismissObject(robj *o, size_t size_hint) {
     /* madvise(MADV_DONTNEED) may not work if Transparent Huge Pages is enabled. */
     if (server.thp_enabled) return;
@@ -967,6 +992,7 @@ char *strEncoding(int encoding) {
     default: return "unknown";
     }
 }
+// 以上都看完了
 
 /* =========================== Memory introspection ========================= */
 

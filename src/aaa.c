@@ -4,14 +4,12 @@
 #include "dict.h"
 #include <stdio.h>
 #include "siphash.c"
+#include "server.h"
 
-uint64_t siphash(const uint8_t *in, const size_t inlen, const uint8_t *k);
 int main() {
-    dict *d = malloc(sizeof(dict));
-    printf("d is %d\n", d->rehashidx);
-
-    uint8_t i = 2;
-    uint64_t hash = siphash((uint8_t *)"abc", 3, &i);
-    printf("hash is %lu\n", hash);
+    dict * d = dictCreate(&sdsHashDictType);
+    dictAdd(d, "aaa", "bbb");
+    dictEntry *de = dictFind(d, "aaa");
+    printf("de:%s", dictGetVal(de));
     return 0;
 }

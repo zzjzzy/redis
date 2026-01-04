@@ -420,6 +420,7 @@ void zmalloc_set_oom_handler(void (*oom_handler)(size_t)) {
 /* Use 'MADV_DONTNEED' to release memory to operating system quickly.
  * We do that in a fork child process to avoid CoW when the parent modifies
  * these shared pages. */
+// ZZJ TODO 看了，但是还没完全明白，有时间可以再深入研究
 void zmadvise_dontneed(void *ptr) {
 #if defined(USE_JEMALLOC) && defined(__linux__)
     static size_t page_size = 0;

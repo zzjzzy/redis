@@ -1,5 +1,19 @@
 # Redis源码学习路线指南
 
+常用代码
+```c
+// server.h
+struct redisObject {
+    unsigned type:4;
+    unsigned encoding:4;
+    unsigned lru:LRU_BITS; /* LRU time (relative to global lru_clock) or
+                            * LFU data (least significant 8 bits frequency
+                            * and most significant 16 bits access time). */
+    int refcount;
+    void *ptr;
+};
+```
+
 ## 进度 ！！！！quicklistNext的优化，在github上提个discussion
 main方法看到这里了initServerConfig();，目前看到这里暂停了，先看基础数据结构
 
@@ -21,10 +35,15 @@ quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 t_hash
 t_list
 t_set
-t_string
+t_string 正在看
 t_zset
+t_stream
 
 ===== 其他 =====
+object.c  【Memory introspection】以上都看完了，其他部分等用到了再看。
+server.c dictType
+server.c zset
+server.c typedef struct RedisModuleType
 rax(STREAM 的核心)
 
 ===== 废弃 =====
@@ -41,6 +60,7 @@ zipmap.c 不用学
 
 ## TODO 
 ### 看下代码里的ZZJ TODO
+### util.c中很多方法没看，只知道是做什么的
 ### quicklist.c quicklistGetIteratorAtIdx
 这个方法看明白了，但是感觉各种索引计算还是有点乱，有时间再梳理下
 
@@ -87,7 +107,25 @@ dictResetIterator会dictResumeRehashing
 
 - RDB文件是什么样的？
 
-## 知识点
+## 笔记
+### redis中用到的数据结构，这个方法应该能说明问题
+```c
+char *strEncoding(int encoding) {
+    switch(encoding) {
+    case OBJ_ENCODING_RAW: return "raw";
+    case OBJ_ENCODING_INT: return "int";
+    case OBJ_ENCODING_HT: return "hashtable";
+    case OBJ_ENCODING_QUICKLIST: return "quicklist";
+    case OBJ_ENCODING_LISTPACK: return "listpack";
+    case OBJ_ENCODING_INTSET: return "intset";
+    case OBJ_ENCODING_SKIPLIST: return "skiplist";
+    case OBJ_ENCODING_EMBSTR: return "embstr";
+    case OBJ_ENCODING_STREAM: return "stream";
+    default: return "unknown";
+    }
+}
+```
+
 ### 计算大于x的最下2次幂数
 看_dictNextExp(dict.c)
 
@@ -143,6 +181,10 @@ pickindex++; 前面多了个空格
 
 ### quicklist.c quicklistNext
 quicklist.c quicklistNext感觉写的有点复杂，看能不能简化下步骤。也不是太好理解，大概梳理了下，算是明白了，但是不思路还是不清晰。
+
+### object.c 注释
+/* If the maxmemory policy permits, we can still return shared integers */
+感觉这句注释不太对，可以发起个讨论讨论下
 
 ## PR!(old 以下PR已提交，待通过)
 ### siphash.c from -> form
