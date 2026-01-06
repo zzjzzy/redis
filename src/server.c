@@ -399,6 +399,7 @@ int dictExpandAllowed(size_t moreMem, double usedRatio) {
 /* Returns the size of the DB dict entry metadata in bytes. In cluster mode, the
  * metadata is used for constructing a doubly linked list of the dict entries
  * belonging to the same cluster slot. See the Slot to Key API in cluster.c. */
+// 已看，但是还不明白怎么用的
 size_t dbDictEntryMetadataSize(dict *d) {
     UNUSED(d);
     /* NOTICE: this also affects overhead_ht_slot_to_keys in getMemoryOverheadData.
@@ -464,6 +465,7 @@ dictType zsetDictType = {
 };
 
 /* Db->dict, keys are sds strings, vals are Redis objects. */
+// db层面的dict类型，应该就是保存到redis db中的数据，redis db中保存的就是key-val，key都是string, val可以是任意类型
 dictType dbDictType = {
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
@@ -478,6 +480,7 @@ dictType dbDictType = {
 };
 
 /* Db->expires */
+// ZZJ TODO 应该是保存每个key的过期时间？
 dictType dbExpiresDictType = {
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
@@ -500,6 +503,7 @@ dictType commandTableDictType = {
 };
 
 /* Hash type hash table (note that small hashes are represented with listpacks) */
+// ZZJ TODO 这个valDestructor是dictSdsDestructor，val只能存储字符串？
 dictType hashDictType = {
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
@@ -524,6 +528,7 @@ dictType sdsReplyDictType = {
 /* Keylist hash table type has unencoded redis objects as keys and
  * lists as values. It's used for blocking operations (BLPOP) and to
  * map swapped keys to a list of clients waiting for this keys to be loaded. */
+// 用到了再理解
 dictType keylistDictType = {
     dictObjHash,                /* hash function */
     NULL,                       /* key dup */
@@ -583,7 +588,6 @@ dictType externalStringType = {
 
 /* Dict for case-insensitive search using sds objects with a zmalloc
  * allocated object as the value. */
-// 正在看
 dictType sdsHashDictType = {
     dictSdsCaseHash,            /* hash function */
     NULL,                       /* key dup */
@@ -664,6 +668,7 @@ int hasActiveChildProcess(void) {
     return server.child_pid != -1;
 }
 
+// 用到的时候再看
 void resetChildState(void) {
     server.child_type = CHILD_TYPE_NONE;
     server.child_pid = -1;

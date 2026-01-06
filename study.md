@@ -40,11 +40,12 @@ t_zset
 t_stream
 
 ===== 其他 =====
-object.c  【Memory introspection】以上都看完了，其他部分等用到了再看。
-server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 看到dbDictEntryMetadataSize
+object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
+server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.c client
 server.c zset
 server.c typedef struct RedisModuleType
+connection.c(h)
 rax(STREAM 的核心)
 
 ===== 废弃 =====
@@ -170,6 +171,9 @@ dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFuncti
 - 数字型字符串转成数字存储，比如123这个字符串，如果用字符串存储，占3个字节，如果转成int8，只占用1个字节
 
 ## PR!
+### server.c
+- 多了个for: Dict for for case-insensitive search using null terminated C strings.
+
 ### [listpack.c]fetch the elements form the listpack into a output array respecting the original order.
 form应该是from，a应该是an
 pickindex++; 前面多了个空格
