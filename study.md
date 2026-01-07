@@ -35,14 +35,14 @@ quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 t_hash
 t_list
 t_set
-t_string 正在看
+t_string 正在看，看到setGenericCommand
 t_zset
 t_stream
 
 ===== 其他 =====
 object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
-server.c client
+server.h struct client 已看完，后面有用到啥字段再看就行
 server.c zset
 server.c typedef struct RedisModuleType
 connection.c(h)
@@ -106,6 +106,10 @@ dictResetIterator会dictResumeRehashing
      * Assert that the provided bucket is the right table. */
     int htidx = dictIsRehashing(d) ? 1 : 0;
 ```
+
+- redis为什么快？
+宏调用减少函数调用开销
+分支预测
 
 - RDB文件是什么样的？
 
@@ -171,6 +175,7 @@ dict.h中类似这种定义，#define dictHashKey(d, key) ((d)->type->hashFuncti
 - 数字型字符串转成数字存储，比如123这个字符串，如果用字符串存储，占3个字节，如果转成int8，只占用1个字节
 
 ## PR!
+### 后续把PR直接写在代码对应的地方了，通过版本号标识是第几次PR 示例：ZZJ PRV2 XXX
 ### server.c
 - 多了个for: Dict for for case-insensitive search using null terminated C strings.
 

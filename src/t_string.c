@@ -42,6 +42,7 @@ static int checkStringLength(client *c, long long size, long long append) {
         return C_OK;
     /* 'uint64_t' cast is there just to prevent undefined behavior on overflow */
     long long total = (uint64_t)size + append;
+    // ZZJ PRV2 represending应该是representing
     /* Test configured max-bulk-len represending a limit of the biggest string object,
      * and also test for overflow. */
     if (total > server.proto_max_bulk_len || total < size || total < append) {
@@ -161,6 +162,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
  * If return C_OK, "milliseconds" output argument will be set to the resulting absolute timestamp.
  * If return C_ERR, an error reply has been added to the given client.
  */
+// 已看
 static int getExpireMillisecondsOrReply(client *c, robj *expire, int flags, int unit, long long *milliseconds) {
     int ret = getLongLongFromObjectOrReply(c, expire, milliseconds, NULL);
     if (ret != C_OK) {

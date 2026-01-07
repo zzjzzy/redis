@@ -76,7 +76,7 @@ struct sharedObjectsStruct shared;
 /* Global vars that are actually used as constants. The following double
  * values are used for double on-disk serialization, and are initialized
  * at runtime to avoid strange compiler optimizations. */
-
+// ZZJ TODO 编译器的异常优化，有空再详细研究下
 double R_Zero, R_PosInf, R_NegInf, R_Nan;
 
 /*================================= Globals ================================= */
@@ -211,6 +211,7 @@ mstime_t mstime(void) {
  * and all the time readings during the execution time should
  * reflect the same time.
  * More details can be found in the comments below. */
+// 已看
 mstime_t commandTimeSnapshot(void) {
     /* When we are in the middle of a command execution, we want to use a
      * reference time that does not change: in that case we just use the
@@ -225,6 +226,7 @@ mstime_t commandTimeSnapshot(void) {
      * propagation to slaves / AOF consistent. See issue #1525 for more info.
      * Note that we cannot use the cached server.mstime because it can change
      * in processEventsWhileBlocked etc. */
+    // ZZJ TODO 这个看着是server的一个值，如果有多个client，这个值岂不是多个client共享？
     return server.cmd_time_snapshot;
 }
 
