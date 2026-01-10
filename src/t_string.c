@@ -38,6 +38,7 @@ int getGenericCommand(client *c);
  *----------------------------------------------------------------------------*/
 
 static int checkStringLength(client *c, long long size, long long append) {
+    // ZZJ TODO mustObeyClient作用是什么？
     if (mustObeyClient(c))
         return C_OK;
     /* 'uint64_t' cast is there just to prevent undefined behavior on overflow */
@@ -82,6 +83,7 @@ static int checkStringLength(client *c, long long size, long long append) {
 /* Forward declaration */
 static int getExpireMillisecondsOrReply(client *c, robj *expire, int flags, int unit, long long *milliseconds);
 
+// 这个就是开始执行SET命令了，往client.db里存数据了已经，并且根据过期参数设置key的过期、通知key变更事件，往reply写命令执行结果
 void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire, int unit, robj *ok_reply, robj *abort_reply) {
     long long milliseconds = 0; /* initialized to avoid any harmness warning */
     int found = 0;
@@ -95,11 +97,13 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
         if (getGenericCommand(c) == C_ERR) return;
     }
 
+    // ZZJ TODO lookupKeyWrite调用的lookupKey还没看
     found = (lookupKeyWrite(c->db,key) != NULL);
 
     if ((flags & OBJ_SET_NX && found) ||
         (flags & OBJ_SET_XX && !found))
     {
+        // ZZJ TODO OBJ_SET_GET也会直接返回，但是不会调用addReply，为什么
         if (!(flags & OBJ_SET_GET)) {
             addReply(c, abort_reply ? abort_reply : shared.null[c->resp]);
         }
@@ -110,16 +114,21 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
     setkey_flags |= ((flags & OBJ_KEEPTTL) || expire) ? SETKEY_KEEPTTL : 0;
     setkey_flags |= found ? SETKEY_ALREADY_EXIST : SETKEY_DOESNT_EXIST;
 
+    // ZZJ TODO setKey还没看
     setKey(c,c->db,key,val,setkey_flags);
     server.dirty++;
+    // ZZJ TODO notifyKeyspaceEvent还没看
     notifyKeyspaceEvent(NOTIFY_STRING,"set",key,c->db->id);
 
     if (expire) {
+        // ZZJ TODO setExpire还没看
         setExpire(c,c->db,key,milliseconds);
         /* Propagate as SET Key Value PXAT millisecond-timestamp if there is
          * EX/PX/EXAT flag. */
         if (!(flags & OBJ_PXAT)) {
             robj *milliseconds_obj = createStringObjectFromLongLong(milliseconds);
+            // 所有过期设置都转换成PXAT
+            // ZZJ TODO rewriteClientCommandVector还没看
             rewriteClientCommandVector(c, 5, shared.set, key, val, shared.pxat, milliseconds_obj);
             decrRefCount(milliseconds_obj);
         }
@@ -137,6 +146,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
         robj **argv = zmalloc((c->argc-1)*sizeof(robj*));
         for (j=0; j < c->argc; j++) {
             char *a = c->argv[j]->ptr;
+            // SET key val GET，这种命令是可以的，是redis 6.x引入的新特性
             /* Skip GET which may be repeated multiple times. */
             if (j >= 3 &&
                 (a[0] == 'g' || a[0] == 'G') &&
@@ -146,6 +156,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
             argv[argc++] = c->argv[j];
             incrRefCount(c->argv[j]);
         }
+        // ZZJ TODO replaceClientCommandVector还没看
         replaceClientCommandVector(c, argc, argv);
     }
 }
@@ -162,7 +173,7 @@ void setGenericCommand(client *c, int flags, robj *key, robj *val, robj *expire,
  * If return C_OK, "milliseconds" output argument will be set to the resulting absolute timestamp.
  * If return C_ERR, an error reply has been added to the given client.
  */
-// 已看
+// 已看，milliseconds会被赋值为时间戳绝对值
 static int getExpireMillisecondsOrReply(client *c, robj *expire, int flags, int unit, long long *milliseconds) {
     int ret = getLongLongFromObjectOrReply(c, expire, milliseconds, NULL);
     if (ret != C_OK) {
@@ -178,6 +189,7 @@ static int getExpireMillisecondsOrReply(client *c, robj *expire, int flags, int 
     if (unit == UNIT_SECONDS) *milliseconds *= 1000;
 
     if ((flags & OBJ_PX) || (flags & OBJ_EX)) {
+        // 此时milliseconds还是相对时间，所以需要加上命令开始执行的时间戳，得到绝对时间
         *milliseconds += commandTimeSnapshot();
     }
 
@@ -210,6 +222,8 @@ static int getExpireMillisecondsOrReply(client *c, robj *expire, int flags, int 
  */
 int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj **expire, int command_type) {
 
+    // 解析extend参数，如果是get命令，扩展参数从argv[2]开始，如果是set命令，扩展参数从argv[3]开始
+    // 从这个方法也能梳理出get set命令的所有扩展参数：看上面注释，上面注释写了GET还有个DEL命令，但是代码没看到处理 ZZJ PRV2
     int j = command_type == COMMAND_GET ? 2 : 3;
     for (; j < c->argc; j++) {
         char *opt = c->argv[j]->ptr;
@@ -219,6 +233,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
             (opt[1] == 'x' || opt[1] == 'X') && opt[2] == '\0' &&
             !(*flags & OBJ_SET_XX) && (command_type == COMMAND_SET))
         {
+            // flags参数是用来被赋值的，!(*flags & OBJ_SET_XX)加这个代码应该是为了避免有冲突的命令，比如同时有NX XX命令
             *flags |= OBJ_SET_NX;
         } else if ((opt[0] == 'x' || opt[0] == 'X') &&
                    (opt[1] == 'x' || opt[1] == 'X') && opt[2] == '\0' &&
@@ -235,12 +250,14 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
             !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
             !(*flags & OBJ_PX) && !(*flags & OBJ_PXAT) && (command_type == COMMAND_SET))
         {
+            // 因为KEEPTTL会保留之前的过期时间，所以上面判断了flags不能有过期时间参数
             *flags |= OBJ_KEEPTTL;
         } else if (!strcasecmp(opt,"PERSIST") && (command_type == COMMAND_GET) &&
                !(*flags & OBJ_EX) && !(*flags & OBJ_EXAT) &&
                !(*flags & OBJ_PX) && !(*flags & OBJ_PXAT) &&
                !(*flags & OBJ_KEEPTTL))
         {
+            // PERSIST是移除过期时间的，所以flags也不能有过期时间参数
             *flags |= OBJ_PERSIST;
         } else if ((opt[0] == 'e' || opt[0] == 'E') &&
                    (opt[1] == 'x' || opt[1] == 'X') && opt[2] == '\0' &&
@@ -285,6 +302,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
             *expire = next;
             j++;
         } else {
+            // ZZJ TODO 这个还没看
             addReplyErrorObject(c,shared.syntaxerr);
             return C_ERR;
         }
@@ -294,6 +312,7 @@ int parseExtendedStringArgumentsOrReply(client *c, int *flags, int *unit, robj *
 
 /* SET key value [NX] [XX] [KEEPTTL] [GET] [EX <seconds>] [PX <milliseconds>]
  *     [EXAT <seconds-timestamp>][PXAT <milliseconds-timestamp>] */
+// 已看，先调用parseExtendedStringArgumentsOrReply解析参数，再调用setGenericCommand真正执行set命令
 void setCommand(client *c) {
     robj *expire = NULL;
     int unit = UNIT_SECONDS;
@@ -303,28 +322,34 @@ void setCommand(client *c) {
         return;
     }
 
+    // argv[2]是set参数的value，value确实需要encoding下
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
 
+// SETNX命令，
 void setnxCommand(client *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,OBJ_SET_NX,c->argv[1],c->argv[2],NULL,0,shared.cone,shared.czero);
 }
 
+// SETEX命令
 void setexCommand(client *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,OBJ_EX,c->argv[1],c->argv[3],c->argv[2],UNIT_SECONDS,NULL,NULL);
 }
 
+// PSETEX命令
 void psetexCommand(client *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,OBJ_PX,c->argv[1],c->argv[3],c->argv[2],UNIT_MILLISECONDS,NULL,NULL);
 }
 
+// 已看（级联方法还没看），真正执行GET命令的方法
 int getGenericCommand(client *c) {
     robj *o;
 
+    // ZZJ TODO lookupKeyReadOrReply调用的lookupKey还没看
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp])) == NULL)
         return C_OK;
 
@@ -332,6 +357,7 @@ int getGenericCommand(client *c) {
         return C_ERR;
     }
 
+    // ZZJ TODO 这个还没看
     addReplyBulk(c,o);
     return C_OK;
 }
@@ -389,13 +415,18 @@ void getexCommand(client *c) {
 
     /* This command is never propagated as is. It is either propagated as PEXPIRE[AT],DEL,UNLINK or PERSIST.
      * This why it doesn't need special handling in feedAppendOnlyFile to convert relative expire time to absolute one. */
+    // ZZJ TODO checkAlreadyExpired还没看
     if (((flags & OBJ_PXAT) || (flags & OBJ_EXAT)) && checkAlreadyExpired(milliseconds)) {
         /* When PXAT/EXAT absolute timestamp is specified, there can be a chance that timestamp
          * has already elapsed so delete the key in that case. */
+        // ZZJ TODO 这个还没看
         int deleted = dbGenericDelete(c->db, c->argv[1], server.lazyfree_lazy_expire, DB_FLAG_KEY_EXPIRED);
         serverAssert(deleted);
+        // 如果是key被删除了，直接将命令重写为UNLINK(shared.unlink)或DEL(shared.del)
         robj *aux = server.lazyfree_lazy_expire ? shared.unlink : shared.del;
+        // 重写client命令，读到这里理解下来，这个一般用来将原始命令转换成另一种形式，方便同步给集群其他节点
         rewriteClientCommandVector(c,2,aux,c->argv[1]);
+        // ZZJ TODO signalModifiedKey这个还没看
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_GENERIC, "del", c->argv[1], c->db->id);
         server.dirty++;
@@ -404,14 +435,17 @@ void getexCommand(client *c) {
         /* Propagate as PXEXPIREAT millisecond-timestamp if there is
          * EX/PX/EXAT/PXAT flag and the key has not expired. */
         robj *milliseconds_obj = createStringObjectFromLongLong(milliseconds);
+        // 把命令重写为 PEXPIREAT key millisseconds
         rewriteClientCommandVector(c,3,shared.pexpireat,c->argv[1],milliseconds_obj);
         decrRefCount(milliseconds_obj);
         signalModifiedKey(c, c->db, c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_GENERIC,"expire",c->argv[1],c->db->id);
         server.dirty++;
     } else if (flags & OBJ_PERSIST) {
+        // ZZJ TODO removeExpire还没看
         if (removeExpire(c->db, c->argv[1])) {
             signalModifiedKey(c, c->db, c->argv[1]);
+            // 命令重写为PERSIST key
             rewriteClientCommandVector(c, 2, shared.persist, c->argv[1]);
             notifyKeyspaceEvent(NOTIFY_GENERIC,"persist",c->argv[1],c->db->id);
             server.dirty++;
@@ -419,8 +453,10 @@ void getexCommand(client *c) {
     }
 }
 
+// GETDEL命令
 void getdelCommand(client *c) {
     if (getGenericCommand(c) == C_ERR) return;
+    // ZZJ TODO dbSyncDelete还没看
     if (dbSyncDelete(c->db, c->argv[1])) {
         /* Propagate as DEL command */
         rewriteClientCommandVector(c,2,shared.del,c->argv[1]);
@@ -430,6 +466,7 @@ void getdelCommand(client *c) {
     }
 }
 
+// GETSET命令
 void getsetCommand(client *c) {
     if (getGenericCommand(c) == C_ERR) return;
     c->argv[2] = tryObjectEncoding(c->argv[2]);
@@ -438,9 +475,12 @@ void getsetCommand(client *c) {
     server.dirty++;
 
     /* Propagate as SET command */
+    // ZZJ TODO 这个还没看，注意和rewriteClientCommandVector区分
+    // 看这个方法的意思应该是把命令中的第0个元素替换成SET，也就是把GETSET命令替换为SET，其他不变。
     rewriteClientCommandArgument(c,0,shared.set);
 }
 
+// SETRANGE命令 setrange key offset value
 void setrangeCommand(client *c) {
     robj *o;
     long offset;
@@ -454,6 +494,7 @@ void setrangeCommand(client *c) {
         return;
     }
 
+    // ZZJ TODO lookupKeyWrite还没看
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o == NULL) {
         /* Return 0 when setting nothing on a non-existing string */
@@ -467,6 +508,7 @@ void setrangeCommand(client *c) {
             return;
 
         o = createObject(OBJ_STRING,sdsnewlen(NULL, offset+sdslen(value)));
+        // ZZJ TODO dbAdd还没看
         dbAdd(c->db,c->argv[1],o);
     } else {
         size_t olen;
@@ -478,6 +520,7 @@ void setrangeCommand(client *c) {
         /* Return existing string length when setting nothing */
         olen = stringObjectLen(o);
         if (sdslen(value) == 0) {
+            // ZZJ TODO addReplyLongLong还没看
             addReplyLongLong(c,olen);
             return;
         }
@@ -487,11 +530,14 @@ void setrangeCommand(client *c) {
             return;
 
         /* Create a copy when the object is shared or encoded. */
+        // ZZJ TODO dbUnshareStringValue还没看
         o = dbUnshareStringValue(c->db,c->argv[1],o);
     }
 
+    // 如果之前key存在，到这里，o是之前存在的值，还没修改
     if (sdslen(value) > 0) {
         o->ptr = sdsgrowzero(o->ptr,offset+sdslen(value));
+        // ZZJ TODO 如果在中文，这个offset对吗，中文一个占用不止一个字节
         memcpy((char*)o->ptr+offset,value,sdslen(value));
         signalModifiedKey(c,c->db,c->argv[1]);
         notifyKeyspaceEvent(NOTIFY_STRING,

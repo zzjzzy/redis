@@ -148,6 +148,7 @@ robj *lookupKey(redisDb *db, robj *key, int flags) {
  * This function is equivalent to lookupKey(). The point of using this function
  * rather than lookupKey() directly is to indicate that the purpose is to read
  * the key. */
+// 已看
 robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
     serverAssert(!(flags & LOOKUP_WRITE));
     return lookupKey(db, key, flags);
@@ -155,6 +156,7 @@ robj *lookupKeyReadWithFlags(redisDb *db, robj *key, int flags) {
 
 /* Like lookupKeyReadWithFlags(), but does not use any flag, which is the
  * common case. */
+// 已看
 robj *lookupKeyRead(redisDb *db, robj *key) {
     return lookupKeyReadWithFlags(db,key,LOOKUP_NONE);
 }
