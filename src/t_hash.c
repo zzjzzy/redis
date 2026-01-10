@@ -47,6 +47,7 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
      * if there are enough arguments we create a pre-sized hash, which
      * might over allocate memory if there are duplicates. */
     size_t new_fields = (end - start + 1) / 2;
+    // hash中entry数量大于hash_max_listpack_entries，将lp转成dict
     if (new_fields > server.hash_max_listpack_entries) {
         hashTypeConvert(o, OBJ_ENCODING_HT);
         dictExpand(o->ptr, new_fields);
@@ -57,12 +58,14 @@ void hashTypeTryConversion(robj *o, robj **argv, int start, int end) {
         if (!sdsEncodedObject(argv[i]))
             continue;
         size_t len = sdslen(argv[i]->ptr);
+        // 元素长度大于hash_max_listpack_value，也转成dict
         if (len > server.hash_max_listpack_value) {
             hashTypeConvert(o, OBJ_ENCODING_HT);
             return;
         }
         sum += len;
     }
+    // 总元素大小超过listpack的限制，也转成dict
     if (!lpSafeToAdd(o->ptr, sum))
         hashTypeConvert(o, OBJ_ENCODING_HT);
 }
@@ -84,6 +87,7 @@ int hashTypeGetFromListpack(robj *o, sds field,
         fptr = lpFind(zl, fptr, (unsigned char*)field, sdslen(field), 1);
         if (fptr != NULL) {
             /* Grab pointer to the value (fptr points to the field) */
+            // 从这里可以看出来，如果是用liskpack存储hash结构，是一个key一个val的存储
             vptr = lpNext(zl, fptr);
             serverAssert(vptr != NULL);
         }
@@ -194,6 +198,7 @@ int hashTypeExists(robj *o, sds field) {
  * semantics of copying the values if needed.
  *
  */
+// ZZJ PRV2 和server.h定义重复了
 #define HASH_SET_TAKE_FIELD (1<<0)
 #define HASH_SET_TAKE_VALUE (1<<1)
 #define HASH_SET_COPY 0
@@ -228,6 +233,7 @@ int hashTypeSet(robj *o, sds field, sds value, int flags) {
 
         if (!update) {
             /* Push new field/value pair onto the tail of the listpack */
+            // 这里也能看出来，如果是liskpack编码，key-val是挨着往后存储的
             zl = lpAppend(zl, (unsigned char*)field, sdslen(field));
             zl = lpAppend(zl, (unsigned char*)value, sdslen(value));
         }
@@ -242,6 +248,7 @@ int hashTypeSet(robj *o, sds field, sds value, int flags) {
         sds v;
         if (flags & HASH_SET_TAKE_VALUE) {
             v = value;
+            // 因为后面要判断是否释放value，因为这个value参数被用在dict的val中了，所以这里不需要释放了
             value = NULL;
         } else {
             v = sdsdup(value);
@@ -250,11 +257,15 @@ int hashTypeSet(robj *o, sds field, sds value, int flags) {
         if (de) {
             dictSetVal(ht, de, v);
             if (flags & HASH_SET_TAKE_FIELD) {
+                // 因为后面要判断是否释放field，因为这个field参数被用在dict的key中了，所以这里不需要释放了
                 field = NULL;
             } else {
+                // HASH_SET_TAKE_FIELD为false，需要用新field，不能用传过来的，所以这里需要dup一个重新set到dictEntry中
+                // 否则，上面在dictAddRaw的时候，就已经将参数中的field设置到dictEntry中了
                 dictSetKey(ht, de, sdsdup(field));
             }
         } else {
+            // else说明key已存在，将旧value删除，set新value
             sdsfree(dictGetVal(existing));
             dictSetVal(ht, existing, v);
             update = 1;

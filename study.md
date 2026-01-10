@@ -32,7 +32,7 @@ ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
 quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 
 ===== t系列 =====
-t_hash
+t_hash 正在看 看到hashTypeDelete了
 t_list
 t_set
 t_string 已看完

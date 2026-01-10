@@ -45,6 +45,7 @@
 #include "redisassert.h"
 #include "util.h"
 
+// listpack结构：6字节header，后面是每个entry，entry第一个字节是entry的编码，不同编码后面跟的数据长度不同
 #define LP_HDR_SIZE 6       /* 32 bit total len + 16 bit number of elements. */
 #define LP_HDR_NUMELE_UNKNOWN UINT16_MAX
 #define LP_MAX_INT_ENCODING_LEN 9
