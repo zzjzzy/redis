@@ -35,9 +35,10 @@ quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 t_hash
 t_list
 t_set
-t_string 正在看，该看getrangeCommand了，sdsgrowzero再看下，看完这几个t_去看db.c和notify.c和networking.c
+t_string 已看完
 t_zset
 t_stream
+看完t_系列后去看db.c和notify.c和networking.c
 
 ===== 其他 =====
 object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
@@ -62,6 +63,7 @@ zipmap.c 不用学
 
 ## TODO 
 ### 看下代码里的ZZJ TODO
+### t_string.c的lcsCommand没细看，需要研究下
 ### util.c中很多方法没看，只知道是做什么的
 ### quicklist.c quicklistGetIteratorAtIdx
 这个方法看明白了，但是感觉各种索引计算还是有点乱，有时间再梳理下

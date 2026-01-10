@@ -547,6 +547,7 @@ void setrangeCommand(client *c) {
     addReplyLongLong(c,sdslen(o->ptr));
 }
 
+// GETRANGE命令
 void getrangeCommand(client *c) {
     robj *o;
     long long start, end;
@@ -584,6 +585,7 @@ void getrangeCommand(client *c) {
     if (start > end || strlen == 0) {
         addReply(c,shared.emptybulk);
     } else {
+        // ZZJ TODO 这个还没看
         addReplyBulkCBuffer(c,(char*)str+start,end-start+1);
     }
 }
@@ -591,6 +593,7 @@ void getrangeCommand(client *c) {
 void mgetCommand(client *c) {
     int j;
 
+    // ZZJ TODO 这个还没看
     addReplyArrayLen(c,c->argc-1);
     for (j = 1; j < c->argc; j++) {
         robj *o = lookupKeyRead(c->db,c->argv[j]);
@@ -610,6 +613,7 @@ void msetGenericCommand(client *c, int nx) {
     int j;
 
     if ((c->argc % 2) == 0) {
+        // ZZJ TODO 这个还没看
         addReplyErrorArity(c);
         return;
     }
@@ -627,6 +631,7 @@ void msetGenericCommand(client *c, int nx) {
 
     int setkey_flags = nx ? SETKEY_DOESNT_EXIST : 0;
     for (j = 1; j < c->argc; j += 2) {
+        // 如果encode了，会返回新的obj，tryObjectEncoding里会处理旧obj的内存释放
         c->argv[j+1] = tryObjectEncoding(c->argv[j+1]);
         setKey(c, c->db, c->argv[j], c->argv[j + 1], setkey_flags);
         notifyKeyspaceEvent(NOTIFY_STRING,"set",c->argv[j],c->db->id);
@@ -635,6 +640,7 @@ void msetGenericCommand(client *c, int nx) {
             setkey_flags = SETKEY_ADD_OR_UPDATE;
     }
     server.dirty += (c->argc-1)/2;
+    // ZZJ TODO 这里有nx的是否，返回shared.cone（返回1），有什么说法吗？
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
@@ -666,6 +672,8 @@ void incrDecrCommand(client *c, long long incr) {
         (value < 0 || value >= OBJ_SHARED_INTEGERS) &&
         value >= LONG_MIN && value <= LONG_MAX)
     {
+        // 如果value是int编码的，并且不在缓存范围内，则直接替换obj.ptr的值，不需要新建obj
+        // 如果value在缓存范围内，下面的createStringObjectFromLongLongForValue方法中会判断是否在缓存内，在缓存内会复用缓存对象。
         new = o;
         o->ptr = (void*)((long)value);
     } else {
@@ -751,6 +759,7 @@ void appendCommand(client *c) {
         /* Create the key */
         c->argv[2] = tryObjectEncoding(c->argv[2]);
         dbAdd(c->db,c->argv[1],c->argv[2]);
+        // ZZJ TODO 这里为什么要incrRefCount，是因为加入dbAdd了吗？
         incrRefCount(c->argv[2]);
         totlen = stringObjectLen(c->argv[2]);
     } else {
@@ -764,6 +773,7 @@ void appendCommand(client *c) {
             return;
 
         /* Append the value */
+        // ZZJ TODO 这个还没看
         o = dbUnshareStringValue(c->db,c->argv[1],o);
         o->ptr = sdscatlen(o->ptr,append->ptr,sdslen(append->ptr));
         totlen = sdslen(o->ptr);
@@ -782,6 +792,7 @@ void strlenCommand(client *c) {
 }
 
 /* LCS key1 key2 [LEN] [IDX] [MINMATCHLEN <len>] [WITHMATCHLEN] */
+// ZZJ TODO 没细看
 void lcsCommand(client *c) {
     uint32_t i, j;
     long long minmatchlen = 0;
