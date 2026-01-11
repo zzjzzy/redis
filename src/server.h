@@ -1957,7 +1957,10 @@ struct redisServer {
     size_t stream_node_max_bytes;
     long long stream_node_max_entries;
     /* List parameters */
+    // 这个配置项用来判断是否将listpack转换成quicklist，看t_list.c中的quicklistNodeExceedsLimit(server.list_max_listpack_size...
+    // 通过正负来控制是限制byte size还是限制entry count
     int list_max_listpack_size;
+    // quicklist中listpack的压缩深度，深度大于此值的才会压缩。
     int list_compress_depth;
     /* time cache */
     redisAtomic time_t unixtime; /* Unix time sampled every cron cycle. */
@@ -2394,6 +2397,7 @@ typedef struct _redisSortOperation {
 } redisSortOperation;
 
 /* Structure to hold list iteration abstraction. */
+// 已看，list结构的iterator，可能是quicklist，可能是listpack
 typedef struct {
     robj *subject;
     unsigned char encoding;
@@ -2404,6 +2408,7 @@ typedef struct {
 } listTypeIterator;
 
 /* Structure for an entry while iterating over a list. */
+// t_list.c中iterator使用，list迭代器迭代到的某个元素的表示，根据encode不同，lpe或entry有值
 typedef struct {
     listTypeIterator *li;
     unsigned char *lpe; /* Entry in listpack */
@@ -2423,6 +2428,7 @@ typedef struct {
  * hashes involves both fields and values. Because it is possible that
  * not both are required, store pointers in the iterator to avoid
  * unnecessary memory allocation for fields/values. */
+// 已看
 typedef struct {
     robj *subject;
     int encoding;
@@ -2435,6 +2441,7 @@ typedef struct {
 
 #include "stream.h"  /* Stream data type header file. */
 
+// ZZJ 以下两行已看
 #define OBJ_HASH_KEY 1
 #define OBJ_HASH_VALUE 2
 
@@ -2446,7 +2453,7 @@ extern int io_threads_op;
 /*-----------------------------------------------------------------------------
  * Extern declarations
  *----------------------------------------------------------------------------*/
-
+// 下面几个extern dictType看完了
 extern struct redisServer server;
 extern struct sharedObjectsStruct shared;
 extern dictType objectKeyPointerValueDictType;
@@ -2709,6 +2716,7 @@ robj *listTypeDup(robj *o);
 void listTypeDelRange(robj *o, long start, long stop);
 void popGenericCommand(client *c, int where);
 void listElementsRemoved(client *c, robj *key, int where, robj *o, long count, int signal, int *deleted);
+// t_list.c中listTypeTryConversionRaw使用
 typedef enum {
     LIST_CONV_AUTO,
     LIST_CONV_GROWING,

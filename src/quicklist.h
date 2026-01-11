@@ -162,6 +162,7 @@ typedef struct quicklistEntry {
 #define QUICKLIST_TAIL -1
 
 /* quicklist node encodings */
+// quicklist的node是否有压缩，quicklist是一个双向链表，其中链表比较深的node可能会被压缩存储。
 #define QUICKLIST_NODE_ENCODING_RAW 1
 #define QUICKLIST_NODE_ENCODING_LZF 2
 
@@ -169,6 +170,7 @@ typedef struct quicklistEntry {
 #define QUICKLIST_NOCOMPRESS 0
 
 /* quicklist node container formats */
+// 如果元素比较大，不会创建listpack，直接保存原始值，如果是原始值，node.container字段就是PLAIN
 #define QUICKLIST_NODE_CONTAINER_PLAIN 1
 #define QUICKLIST_NODE_CONTAINER_PACKED 2
 

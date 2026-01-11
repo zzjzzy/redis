@@ -260,6 +260,7 @@ void dictListDestructor(dict *d, void *val)
     listRelease((list*)val);
 }
 
+// 已看
 int dictSdsKeyCompare(dict *d, const void *key1,
         const void *key2)
 {
@@ -281,6 +282,7 @@ int dictSdsKeyCaseCompare(dict *d, const void *key1,
     return strcasecmp(key1, key2) == 0;
 }
 
+// 已看，dict中元素销毁函数，用于dictType
 void dictObjectDestructor(dict *d, void *val)
 {
     UNUSED(d);
@@ -288,6 +290,7 @@ void dictObjectDestructor(dict *d, void *val)
     decrRefCount(val);
 }
 
+// 已看
 void dictSdsDestructor(dict *d, void *val)
 {
     UNUSED(d);
@@ -299,6 +302,7 @@ void *dictSdsDup(dict *d, const void *key) {
     return sdsdup((const sds) key);
 }
 
+// 已看，用于dictType obj类型的key compare
 int dictObjKeyCompare(dict *d, const void *key1,
         const void *key2)
 {
@@ -306,11 +310,13 @@ int dictObjKeyCompare(dict *d, const void *key1,
     return dictSdsKeyCompare(d, o1->ptr,o2->ptr);
 }
 
+// 已看
 uint64_t dictObjHash(const void *key) {
     const robj *o = key;
     return dictGenHashFunction(o->ptr, sdslen((sds)o->ptr));
 }
 
+// 已看
 uint64_t dictSdsHash(const void *key) {
     return dictGenHashFunction((unsigned char*)key, sdslen((char*)key));
 }
@@ -325,6 +331,7 @@ uint64_t dictCStrHash(const void *key) {
 }
 
 /* Dict hash function for null terminated string */
+// 已看
 uint64_t dictCStrCaseHash(const void *key) {
     return dictGenCaseHashFunction((unsigned char*)key, strlen((char*)key));
 }
@@ -341,11 +348,13 @@ int dictCStrKeyCompare(dict *d, const void *key1, const void *key2) {
 }
 
 /* Dict case insensitive compare function for null terminated string */
+// 已看
 int dictCStrKeyCaseCompare(dict *d, const void *key1, const void *key2) {
     UNUSED(d);
     return strcasecmp(key1, key2) == 0;
 }
 
+// 已看，obj形式的dict key比较函数，用于dictType
 int dictEncObjKeyCompare(dict *d, const void *key1, const void *key2)
 {
     robj *o1 = (robj*) key1, *o2 = (robj*) key2;
@@ -368,6 +377,7 @@ int dictEncObjKeyCompare(dict *d, const void *key1, const void *key2)
     return cmp;
 }
 
+// 已看，对obj形式的key计算hash值
 uint64_t dictEncObjHash(const void *key) {
     robj *o = (robj*) key;
 
@@ -412,16 +422,20 @@ size_t dbDictEntryMetadataSize(dict *d) {
 /* Returns the size of the DB dict metadata in bytes. In cluster mode, we store
  * a pointer to the db in the main db dict, used for updating the slot-to-key
  * mapping when a dictEntry is reallocated. */
+// 已看，如果是集群模式，metadata中保存一些信息
 size_t dbDictMetadataSize(void) {
     return server.cluster_enabled ? sizeof(clusterDictMetadata) : 0;
 }
 
+// 已看，slotToKeyReplaceEntry还没看
 void dbDictAfterReplaceEntry(dict *d, dictEntry *de) {
     if (server.cluster_enabled) slotToKeyReplaceEntry(d, de);
 }
 
 /* Generic hash table type where keys are Redis Objects, Values
  * dummy pointers. */
+// ZZJ 从【dictType objectKeyPointerValueDictType 】到【dictType sdsHashDictType】已看完
+// 这个dictType的命令很好理解，拆解就是objectKey-PointerValue-dictType，也就是key是obj类型，value是通用指针类型
 dictType objectKeyPointerValueDictType = {
     dictEncObjHash,            /* hash function */
     NULL,                      /* key dup */
@@ -482,7 +496,6 @@ dictType dbDictType = {
 };
 
 /* Db->expires */
-// ZZJ TODO 应该是保存每个key的过期时间？
 dictType dbExpiresDictType = {
     dictSdsHash,                /* hash function */
     NULL,                       /* key dup */
@@ -530,7 +543,8 @@ dictType sdsReplyDictType = {
 /* Keylist hash table type has unencoded redis objects as keys and
  * lists as values. It's used for blocking operations (BLPOP) and to
  * map swapped keys to a list of clients waiting for this keys to be loaded. */
-// 用到了再理解
+// 已看，根据dictListDestructor可以知道，val存储的是adlist
+// 看这个注释，value存储的应该是clientId
 dictType keylistDictType = {
     dictObjHash,                /* hash function */
     NULL,                       /* key dup */
@@ -564,6 +578,7 @@ dictType migrateCacheDictType = {
     NULL                        /* allow to expand */
 };
 
+// ZZJ PRV2 多了个for
 /* Dict for for case-insensitive search using null terminated C strings.
  * The keys stored in dict are sds though. */
 dictType stringSetDictType = {
@@ -576,6 +591,7 @@ dictType stringSetDictType = {
     NULL                        /* allow to expand */
 };
 
+// ZZJ PRV2 多了个for
 /* Dict for for case-insensitive search using null terminated C strings.
  * The key and value do not have a destructor. */
 dictType externalStringType = {
@@ -1833,10 +1849,12 @@ void afterSleep(struct aeEventLoop *eventLoop) {
 
 /* =========================== Server initialization ======================== */
 
+// 已看，过了一遍，就是创建各种share对象，具体用到的地方再看怎么使用就行
 void createSharedObjects(void) {
     int j;
 
     /* Shared command responses */
+    // ZZJ TODO 返回值的+*:等前缀什么意思？
     shared.ok = createObject(OBJ_STRING,sdsnew("+OK\r\n"));
     shared.emptybulk = createObject(OBJ_STRING,sdsnew("$0\r\n\r\n"));
     shared.czero = createObject(OBJ_STRING,sdsnew(":0\r\n"));

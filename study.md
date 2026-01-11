@@ -32,12 +32,12 @@ ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
 quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 
 ===== t系列 =====
-t_hash 正在看 看到hashTypeDelete了
-t_list
-t_set
-t_string 已看完
-t_zset
-t_stream
+t_hash(1175行) 已看完
+t_list(1388行) 正在看，该看lposCommand
+t_set(1680行)
+t_string(1009行) 已看完
+t_zset(4461行)
+t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 
 ===== 其他 =====
@@ -46,6 +46,8 @@ server.c dict(从【Hash table type implementation】到【int allPersistenceDis
 server.h struct client 已看完，后面有用到啥字段再看就行
 server.c zset
 server.c typedef struct RedisModuleType
+db.c(2560行)
+networking.c(4589行)
 connection.c(h)
 rax(STREAM 的核心)
 
@@ -62,6 +64,7 @@ zipmap.c 不用学
 
 
 ## TODO 
+### sds的这个特性【an SDS string is always an odd pointer 】再深入研究下，用在dict中有什么优势？
 ### 看下代码里的ZZJ TODO
 ### t_string.c的lcsCommand没细看，需要研究下
 ### util.c中很多方法没看，只知道是做什么的
@@ -116,6 +119,7 @@ dictResetIterator会dictResumeRehashing
 - RDB文件是什么样的？
 
 ## 笔记
+### 源码读着很顺，一个文件从上往下读就可以，不用跳来跳去，基本是你读到一个方法定义，下面很快就会用到这个方法。
 ### redis中用到的数据结构，这个方法应该能说明问题
 ```c
 char *strEncoding(int encoding) {

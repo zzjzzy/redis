@@ -188,6 +188,7 @@ void listTypePush(robj *subject, robj *value, int where) {
     }
 }
 
+// ZZJ 这个方法是quicklistPopCustom用的
 void *listPopSaver(unsigned char *data, size_t sz) {
     return createStringObject((char*)data,sz);
 }
@@ -198,6 +199,7 @@ robj *listTypePop(robj *subject, int where) {
     if (subject->encoding == OBJ_ENCODING_QUICKLIST) {
         long long vlong;
         int ql_where = where == LIST_HEAD ? QUICKLIST_HEAD : QUICKLIST_TAIL;
+        // quicklistPopCustom会将saver返回的值赋值给data，也就是这里的value，saver接收的参数就是pop出元素值和size
         if (quicklistPopCustom(subject->ptr, ql_where, (unsigned char **)&value,
                                NULL, &vlong, listPopSaver)) {
             if (!value)
@@ -241,11 +243,14 @@ listTypeIterator *listTypeInitIterator(robj *subject, long index,
     li->iter = NULL;
     /* LIST_HEAD means start at TAIL and move *towards* head.
      * LIST_TAIL means start at HEAD and move *towards* tail. */
+    // 注意这里的direction=LIST_HEAD和后面的push pop的LIST_HEAD的区别，direct的LIST_HEAD表示从尾向头遍历
+    // 后面push pop的LIST_HEAD就是在头部push或pop
     if (li->encoding == OBJ_ENCODING_QUICKLIST) {
         int iter_direction = direction == LIST_HEAD ? AL_START_TAIL : AL_START_HEAD;
         li->iter = quicklistGetIteratorAtIdx(li->subject->ptr,
                                              iter_direction, index);
     } else if (li->encoding == OBJ_ENCODING_LISTPACK) {
+        // listpack没有iterator，所以li->lpi就是指向当前index所在的元素，后续迭代也是直接在listpack上迭代
         li->lpi = lpSeek(subject->ptr, index);
     } else {
         serverPanic("Unknown list encoding");
@@ -265,6 +270,9 @@ void listTypeSetIteratorDirection(listTypeIterator *li, listTypeEntry *entry, un
         unsigned char *lp = li->subject->ptr;
         /* Note that the iterator for listpack always points to the next of the current entry,
          * so we need to update position of the iterator depending on the direction. */
+        // 注释的意思是说，listpack的iterator指向的是要迭代的下一个元素，所以如果方向变了，指向的元素也需要变
+        // 如果是从头到尾遍历，当前指向的是i，也就是[0,i-1]已经遍历了，如果改成从尾到头变量（direction == LIST_HEAD），
+        // 则应该遍历[i-1, 0]，下一个要遍历的应该是i-1，所以需要lpPrev
         li->lpi = (direction == LIST_TAIL) ? lpNext(lp, entry->lpe) : lpPrev(lp, entry->lpe);
     } else {
         serverPanic("Unknown list encoding");
@@ -281,6 +289,7 @@ void listTypeReleaseIterator(listTypeIterator *li) {
 /* Stores pointer to current the entry in the provided entry structure
  * and advances the position of the iterator. Returns 1 when the current
  * entry is in fact an entry, 0 otherwise. */
+// ZZJ entry会被赋值当前迭代到的元素同时li.iter或li.lpi指向下一个元素。
 int listTypeNext(listTypeIterator *li, listTypeEntry *entry) {
     /* Protect from converting when iterating */
     serverAssert(li->subject->encoding == li->encoding);
@@ -425,6 +434,7 @@ void listTypeDelete(listTypeIterator *iter, listTypeEntry *entry) {
         iter->subject->ptr = lpDelete(iter->subject->ptr,p,&p);
 
         /* Update position of the iterator depending on the direction */
+        // lpDelete会将p指向删除元素的下一个元素，所以如果是从头到尾遍历，iter.lpi就是赋值p就行，如果是从尾到头遍历，则需要将iter.lpi指向p的前一个元素
         if (iter->direction == LIST_TAIL)
             iter->lpi = p;
         else {
@@ -656,9 +666,12 @@ void lsetCommand(client *c) {
  *
  * 'deleted' is an optional output argument to get an indication
  * if the key got deleted by this function. */
+// 已看，o: list对象，key: list对象对应的key，where: HEAD从头pop，TAIL从尾pop，count: pop多少个元素
+// signal: 看listElementsRemoved的注释，deleted: 是否有删除key，注意deleted表示的是是否有删除key，因为pop完后list如果为空了，会删除整个list
 void listPopRangeAndReplyWithKey(client *c, robj *o, robj *key, int where, long count, int signal, int *deleted) {
     long llen = listTypeLength(o);
     long rangelen = (count > llen) ? llen : count;
+    // 从头或者尾pop rangelen个元素，因为是从头或者尾pop，所以如果是从头pop，start=0，如果从尾部pop，start就是-count。
     long rangestart = (where == LIST_HEAD) ? 0 : -rangelen;
     long rangeend = (where == LIST_HEAD) ? rangelen - 1 : -1;
     int reverse = (where == LIST_HEAD) ? 0 : 1;
@@ -677,6 +690,7 @@ void listPopRangeAndReplyWithKey(client *c, robj *o, robj *key, int where, long 
 /* Extracted from `addListRangeReply()` to reply with a quicklist list.
  * Note that the purpose is to make the methods small so that the
  * code in the loop can be inlined better to improve performance. */
+// 已看
 void addListQuicklistRangeReply(client *c, robj *o, int from, int rangelen, int reverse) {
     /* Return the result in form of a multi-bulk reply */
     addReplyArrayLen(c,rangelen);
@@ -698,6 +712,7 @@ void addListQuicklistRangeReply(client *c, robj *o, int from, int rangelen, int 
 /* Extracted from `addListRangeReply()` to reply with a listpack list.
  * Note that the purpose is to make the methods small so that the
  * code in the loop can be inlined better to improve performance. */
+// 已看
 void addListListpackRangeReply(client *c, robj *o, int from, int rangelen, int reverse) {
     unsigned char *p = lpSeek(o->ptr, from);
     unsigned char *vstr;
@@ -724,6 +739,7 @@ void addListListpackRangeReply(client *c, robj *o, int from, int rangelen, int r
  * must be less than end or an empty array is returned. When the reverse
  * argument is set to a non-zero value, the reply is reversed so that elements
  * are returned from end to start. */
+// 已看，就是计算了一下索引，计算下需要读取从哪里到哪里的数据
 void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
     long rangelen, llen = listTypeLength(o);
 
@@ -756,6 +772,7 @@ void addListRangeReply(client *c, robj *o, long start, long end, int reverse) {
  *
  * 'deleted' is an optional output argument to get an indication
  * if the key got deleted by this function. */
+// 已看 list元素remove后做一些清理工作
 void listElementsRemoved(client *c, robj *key, int where, robj *o, long count, int signal, int *deleted) {
     char *event = (where == LIST_HEAD) ? "lpop" : "rpop";
 
@@ -795,6 +812,7 @@ void popGenericCommand(client *c, int where) {
     if (o == NULL || checkType(c, o, OBJ_LIST))
         return;
 
+    // count=0，返回空array
     if (hascount && !count) {
         /* Fast exit path. */
         addReply(c,shared.emptyarray);
@@ -831,6 +849,7 @@ void popGenericCommand(client *c, int where) {
  * 'count' is the number of elements requested to pop.
  *
  * Always reply with array. */
+// 已看，只会从一个key里pop，遍历key，直到遍历到list中有元素的key，然后进行pop，即使pop的数量没达到count那么多，也不会向下继续循环了。
 void mpopGenericCommand(client *c, robj **keys, int numkeys, int where, long count) {
     int j;
     robj *o;
@@ -908,6 +927,9 @@ void ltrimCommand(client *c) {
 
     /* Invariant: start >= 0, so this test will be true when end < 0.
      * The range is empty when start > end or start >= length. */
+    // ltrim代表左边trim的长度，rtrim代表右边trim的长度
+    // 当start>end时，会trim掉整个list，此时赋值ltrim=llen就相当于左边trim整个list，右边就不需要trim了，所以rtrim赋值为0
+    // [start, end]可以理解为需要保留的部分索引(包含start和end)，比如ltrim list 3,6，start=3, end=6，最后list就剩下list[3,6]的部分
     if (start > end || start >= llen) {
         /* Out of range start or start > end result in empty list */
         ltrim = llen;
@@ -920,6 +942,8 @@ void ltrimCommand(client *c) {
 
     /* Remove list elements to perform the trim */
     if (o->encoding == OBJ_ENCODING_QUICKLIST) {
+        // 因为ltrim被赋值为start，而start是索引，所以比如start=1，代表会删除1个元素，也就是删除索引0的元素，索引1的元素会被保留，
+        // 所以start是包含，也就是start处的元素不会被删除
         quicklistDelRange(o->ptr,0,ltrim);
         quicklistDelRange(o->ptr,-rtrim,rtrim);
     } else if (o->encoding == OBJ_ENCODING_LISTPACK) {

@@ -489,6 +489,7 @@ void hashTypeConvertListpack(robj *o, int enc) {
             if (ret != DICT_OK) {
                 sdsfree(key); sdsfree(value); /* Needed for gcc ASAN */
                 hashTypeReleaseIterator(hi);  /* Needed for gcc ASAN */
+                // ZZJ TODO serverLogHexDump还没看
                 serverLogHexDump(LL_WARNING,"listpack with dup elements dump",
                     o->ptr,lpBytes(o->ptr));
                 serverPanic("Listpack corruption detected");
@@ -627,6 +628,7 @@ void hsetCommand(client *c) {
     hashTypeTryConversion(o,c->argv,2,c->argc-1);
 
     for (i = 2; i < c->argc; i += 2)
+        // hashTypeSet返回0是插入，返回1是更新
         created += !hashTypeSet(o,c->argv[i]->ptr,c->argv[i+1]->ptr,HASH_SET_COPY);
 
     /* HMSET (deprecated) and HSET return value is different. */
@@ -730,6 +732,7 @@ void hincrbyfloatCommand(client *c) {
     decrRefCount(newobj);
 }
 
+// 这个方法命名感觉不好，add的是value，应该叫addHashValueToReply?
 static void addHashFieldToReply(client *c, robj *o, sds field) {
     if (o == NULL) {
         addReplyNull(c);
@@ -767,6 +770,7 @@ void hmgetCommand(client *c) {
     /* Don't abort when the key cannot be found. Non-existing keys are empty
      * hashes, where HMGET should respond with a series of null bulks. */
     o = lookupKeyRead(c->db, c->argv[1]);
+    // checkType里，如果o是NULL，返回0，表示type check通过，check不通过会返回1
     if (checkType(c,o,OBJ_HASH)) return;
 
     addReplyArrayLen(c, c->argc-2);
@@ -901,6 +905,7 @@ void hscanCommand(client *c) {
     robj *o;
     unsigned long cursor;
 
+    // ZZJ TODO parseScanCursorOrReply和scanGenericCommand还没看
     if (parseScanCursorOrReply(c,c->argv[2],&cursor) == C_ERR) return;
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
         checkType(c,o,OBJ_HASH)) return;
@@ -934,6 +939,7 @@ static void hrandfieldReplyWithListpack(client *c, unsigned int count, listpackE
  * the number of randoms per time. */
 #define HRANDFIELD_RANDOM_SAMPLE_LIMIT 1000
 
+// 已看，这个看着是随机返回count数量的key和val(withvalues=true则返回val)
 void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
     unsigned long count, size;
     int uniq = 1;
@@ -961,6 +967,7 @@ void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
      * This case is trivial and can be served without auxiliary data
      * structures. This case is the only one that also needs to return the
      * elements in random order. */
+    // case1是真随机返回元素，其他都不是真随机
     if (!uniq || count == 1) {
         if (withvalues && c->resp == 2)
             addReplyArrayLen(c, count*2);
@@ -973,6 +980,7 @@ void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
                 key = dictGetKey(de);
                 value = dictGetVal(de);
                 if (withvalues && c->resp > 2)
+                    // ZZJ TODO 这一行代码什么意思？
                     addReplyArrayLen(c,2);
                 addReplyBulkCBuffer(c, key, sdslen(key));
                 if (withvalues)
@@ -1003,6 +1011,8 @@ void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
     }
 
     /* Initiate reply count, RESP3 responds with nested array, RESP2 with flat one. */
+    // ZZJ 看到这里明白了c->resp == 2，是按照key-val平铺返回的，所以需要返回的数组数量是reply_size*2
+    // 如果不是=2，key-val是作为键值整体返回的（具体返回形式是什么样的还不知道，应该在后面有），数组数量只需要是reply_size
     long reply_size = count < size ? count : size;
     if (withvalues && c->resp == 2)
         addReplyArrayLen(c, reply_size*2);
@@ -1016,6 +1026,7 @@ void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
         hashTypeIterator *hi = hashTypeInitIterator(hash);
         while (hashTypeNext(hi) != C_ERR) {
             if (withvalues && c->resp > 2)
+                // ZZJ TODO 这里为什么要再addReplyArrayLen？前面不是已经addReplyArrayLen了吗
                 addReplyArrayLen(c,2);
             addHashIteratorCursorToReply(c, hi, OBJ_HASH_KEY);
             if (withvalues)
@@ -1054,6 +1065,7 @@ void hrandfieldWithCountCommand(client *c, long l, int withvalues) {
      * This is done because if the number of requested elements is just
      * a bit less than the number of elements in the hash, the natural approach
      * used into CASE 4 is highly inefficient. */
+    // 如果请求的数量count比hash的size略小，用case3
     if (count*HRANDFIELD_SUB_STRATEGY_MUL > size) {
         /* Hashtable encoding (generic implementation) */
         dict *d = dictCreate(&sdsReplyDictType);
