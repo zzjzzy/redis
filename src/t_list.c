@@ -29,6 +29,7 @@
 
 #include "server.h"
 
+// list底层编码是listpack(元素少时)或quicklist(元素多时)
 /*-----------------------------------------------------------------------------
  * List API
  *----------------------------------------------------------------------------*/
@@ -985,6 +986,7 @@ void ltrimCommand(client *c) {
 void lposCommand(client *c) {
     robj *o, *ele;
     ele = c->argv[2];
+    // 注意direct和where都可以用LIST_TAIL表示，direction = LIST_TAIL;表示从头到尾遍历，where = LIST_TAIL;表示在尾部做些事情
     int direction = LIST_TAIL;
     long rank = 1, count = -1, maxlen = 0; /* Count -1: option not given. */
 
@@ -1068,8 +1070,10 @@ void lposCommand(client *c) {
     /* Reply to the client. Note that arraylenptr is not NULL only if
      * the COUNT option was selected. */
     if (arraylenptr != NULL) {
+        // ZZJ TODO 这里的arraylenptr和arraylen怎么用的没太看懂，有空再研究
         setDeferredArrayLen(c,arraylenptr,arraylen);
     } else {
+        // ZZJ TODO 这里的if判断没太明白，有空再研究
         if (matchindex != -1)
             addReplyLongLong(c,matchindex);
         else
@@ -1124,6 +1128,7 @@ void lremCommand(client *c) {
     addReplyLongLong(c,removed);
 }
 
+// 将value push到dstobj(是个list)中，dstkey没有用于查找list，而且用于创建key或者通知key事件
 void lmoveHandlePush(client *c, robj *dstkey, robj *dstobj, robj *value,
                      int where) {
     /* Create the list if the key does not exist */
@@ -1185,6 +1190,7 @@ void lmoveGenericCommand(client *c, int wherefrom, int whereto) {
         /* listTypePop returns an object with its refcount incremented */
         decrRefCount(value);
 
+        // ZZJ TODO 这里没看懂
         if (c->cmd->proc == blmoveCommand) {
             rewriteClientCommandVector(c,5,shared.lmove,
                                        c->argv[1],c->argv[2],c->argv[3],c->argv[4]);
@@ -1243,6 +1249,7 @@ void blockingPopGenericCommand(client *c, robj **keys, int numkeys, int where, i
         != C_OK) return;
 
     /* Traverse all input keys, we take action only based on one key. */
+    // 只会从一个key中取，循环所有key，找到第一个不为空的
     for (j = 0; j < numkeys; j++) {
         key = keys[j];
         o = lookupKeyWrite(c->db, key);
@@ -1295,6 +1302,7 @@ void blockingPopGenericCommand(client *c, robj **keys, int numkeys, int where, i
     }
 
     /* If the keys do not exist we must block */
+    // ZZJ TODO 这个还没看
     blockForKeys(c,BLOCKED_LIST,keys,numkeys,timeout,0);
 }
 
@@ -1308,6 +1316,8 @@ void brpopCommand(client *c) {
     blockingPopGenericCommand(c,c->argv+1,c->argc-2,LIST_TAIL,c->argc-1,-1);
 }
 
+// BLMOVE source destination LEFT|RIGHT LEFT|RIGHT timeout
+// b-block，block list move，阻塞的从source move一个元素到destination，wherefrom: 从source的头还是尾pop，whereto: push到destination的头还是尾
 void blmoveGenericCommand(client *c, int wherefrom, int whereto, mstime_t timeout) {
     robj *key = lookupKeyWrite(c->db, c->argv[1]);
     if (checkType(c,key,OBJ_LIST)) return;
@@ -1343,6 +1353,7 @@ void blmoveCommand(client *c) {
 }
 
 /* BRPOPLPUSH <source> <destination> <timeout> */
+// block right pop left push
 void brpoplpushCommand(client *c) {
     mstime_t timeout;
     if (getTimeoutFromObjectOrReply(c,c->argv[3],&timeout,UNIT_SECONDS)
@@ -1354,10 +1365,12 @@ void brpoplpushCommand(client *c) {
  *
  * 'numkeys_idx' parameter position of key number.
  * 'is_block' this indicates whether it is a blocking variant. */
+// list multi pop
 void lmpopGenericCommand(client *c, int numkeys_idx, int is_block) {
     long j;
     long numkeys = 0;      /* Number of keys. */
     int where = 0;         /* HEAD for LEFT, TAIL for RIGHT. */
+    // 从count注释可以看到，最多返回count个，但是也可能少于count
     long count = -1;       /* Reply will consist of up to count elements, depending on the list's length. */
 
     /* Parse the numkeys. */
@@ -1396,6 +1409,7 @@ void lmpopGenericCommand(client *c, int numkeys_idx, int is_block) {
         /* BLOCK. We will handle CLIENT_DENY_BLOCKING flag in blockingPopGenericCommand. */
         blockingPopGenericCommand(c, c->argv+numkeys_idx+1, numkeys, where, 1, count);
     } else {
+        // c->argv+numkeys_idx是numkeys所在的索引，+1就是keys的索引
         /* NON-BLOCK */
         mpopGenericCommand(c, c->argv+numkeys_idx+1, numkeys, where, count);
     }
