@@ -43,6 +43,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
  *
  * The size hint indicates approximately how many items will be added which is
  * used to determine the initial representation. */
+// ZZJ 已看，根据一定的条件创建set obj，编码可能是：intset、listpack、dict
 robj *setTypeCreate(sds value, size_t size_hint) {
     if (isSdsRepresentableAsLongLong(value,NULL) == C_OK && size_hint <= server.set_max_intset_entries)
         return createIntsetObject();
@@ -56,6 +57,7 @@ robj *setTypeCreate(sds value, size_t size_hint) {
     return o;
 }
 
+// ZZJ PRV2 多了个the
 /* Check if the existing set should be converted to another encoding based off the
  * the size hint. */
 void setTypeMaybeConvert(robj *set, size_t size_hint) {
@@ -67,6 +69,7 @@ void setTypeMaybeConvert(robj *set, size_t size_hint) {
 }
 
 /* Return the maximum number of entries to store in an intset. */
+// ZZJ 如果是用intset存储的，限制大小，由于intset的限制，最大不能超过1G，为啥是1G忘了，有空再看下intset了解下
 static size_t intsetMaxEntries(void) {
     size_t max_entries = server.set_max_intset_entries;
     /* limit to 1G entries due to intset internals. */
@@ -192,6 +195,7 @@ int setTypeAddAux(robj *set, char *str, size_t len, int64_t llval, int str_is_sd
             size_t maxelelen = 0, totsize = 0;
             unsigned long n = intsetLen(set->ptr);
             if (n != 0) {
+                // 计算下如果intset转成listpack，会占用多大空间，以便后面判断是把intset转成listpack还是dict
                 size_t elelen1 = sdigits10(intsetMax(set->ptr));
                 size_t elelen2 = sdigits10(intsetMin(set->ptr));
                 maxelelen = max(elelen1, elelen2);
@@ -206,6 +210,7 @@ int setTypeAddAux(robj *set, char *str, size_t len, int64_t llval, int str_is_sd
             {
                 /* In the "safe to add" check above we assumed all elements in
                  * the intset are of size maxelelen. This is an upper bound. */
+                // intsetLen是intset中元素的个数，所以第3个参数cap表示的是元素的个数，不是元素占用的空间大小
                 setTypeConvertAndExpand(set, OBJ_ENCODING_LISTPACK,
                                         intsetLen(set->ptr) + 1, 1);
                 unsigned char *lp = set->ptr;
@@ -437,6 +442,7 @@ int setTypeRandomElement(robj *setobj, char **str, size_t *len, int64_t *llele) 
         *str = NULL; /* Not needed. Defensive. */
     } else if (setobj->encoding == OBJ_ENCODING_LISTPACK) {
         unsigned char *lp = setobj->ptr;
+        // ZZJ TODO 这里为什么不用lpRandomEntries？
         int r = rand() % lpLength(lp);
         unsigned char *p = lpSeek(lp, r);
         unsigned int l;
@@ -477,6 +483,7 @@ robj *setTypePopRandom(robj *set) {
     return obj;
 }
 
+// 已看
 unsigned long setTypeSize(const robj *subject) {
     if (subject->encoding == OBJ_ENCODING_HT) {
         return dictSize((const dict*)subject->ptr);
@@ -532,6 +539,7 @@ int setTypeConvertAndExpand(robj *setobj, int enc, unsigned long cap, int panic)
         size_t estcap = cap * 2;
         if (setobj->encoding == OBJ_ENCODING_INTSET && setTypeSize(setobj) > 0) {
             /* If we're converting from intset, we have a better estimate. */
+            // 根据intset中的最大值和最小值估算listpack大概占多大空间
             size_t s1 = lpEstimateBytesRepeatedInteger(intsetMin(setobj->ptr), cap);
             size_t s2 = lpEstimateBytesRepeatedInteger(intsetMax(setobj->ptr), cap);
             estcap = max(s1, s2);

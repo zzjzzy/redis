@@ -1948,8 +1948,11 @@ struct redisServer {
     /* Zip structure config, see redis.conf for more information  */
     size_t hash_max_listpack_entries;
     size_t hash_max_listpack_value;
+    // t_set.c，小于等于此值，并且都是int，用intset实现t_set
     size_t set_max_intset_entries;
+    // t_set.c，小于等于此值，用listpack实现t_set，否则用dict
     size_t set_max_listpack_entries;
+    // t_set.c 限制listpack中单个元素的大小，超过则用dict
     size_t set_max_listpack_value;
     size_t zset_max_listpack_entries;
     size_t zset_max_listpack_value;
@@ -2419,6 +2422,7 @@ typedef struct {
 typedef struct {
     robj *subject;
     int encoding;
+    // t_set.c的迭代器，因为set有3中编码方式，所以迭代器需要下面3中类型的指针
     int ii; /* intset iterator */
     dictIterator *di;
     unsigned char *lpi; /* listpack iterator */
