@@ -1516,6 +1516,8 @@ void sinterstoreCommand(client *c) {
     sinterGenericCommand(c, c->argv+2, c->argc-2, c->argv[1], 0, 0);
 }
 
+// ZZJ 取并集或差集，op == SET_OP_DIFF：差集，op == SET_OP_UNION：交集
+// ZZJ PRV2 参考sinterGenericCommand，写下这个方法的注释
 void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
                               robj *dstkey, int op) {
     robj **sets = zmalloc(sizeof(robj*)*setnum);
@@ -1540,6 +1542,8 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
             return;
         }
         sets[j] = setobj;
+        // 这里为什么只和sets[0]比较，因为差集分为多集合差集和对称差集，这里是多集合差集，也就是sets[1,j-1]都和sets[0]比较
+        // 所以只要有一个和sets[0]一样，差集就是空
         if (j > 0 && sets[0] == sets[j]) {
             sameset = 1; 
         }
@@ -1567,6 +1571,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
         /* Algorithm 1 has better constant times and performs less operations
          * if there are elements in common. Give it some advantage. */
         algo_one_work /= 2;
+        // ZZJ 反过来想，如果sets[0].size*j/2比set[0-j].size还大，说明sets[0].size很大，这种情况就要用算法2
         diff_algo = (algo_one_work <= algo_two_work) ? 1 : 2;
 
         if (diff_algo == 1 && setnum > 1) {
@@ -1661,6 +1666,7 @@ void sunionDiffGenericCommand(client *c, robj **setkeys, int setnum,
                 addReplyBulkLongLong(c, llval);
         }
         setTypeReleaseIterator(si);
+        // ZZJ TODO freeObjAsync还没看，看下freeObjAsync是怎么执行异步的
         server.lazyfree_lazy_server_del ? freeObjAsync(NULL, dstset, -1) :
                                           decrRefCount(dstset);
     } else {
@@ -1710,8 +1716,10 @@ void sscanCommand(client *c) {
     robj *set;
     unsigned long cursor;
 
+    // ZZJ TODO parseScanCursorOrReply还没看
     if (parseScanCursorOrReply(c,c->argv[2],&cursor) == C_ERR) return;
     if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
         checkType(c,set,OBJ_SET)) return;
+    // ZZJ TODO scanGenericCommand还没看
     scanGenericCommand(c,set,cursor);
 }
