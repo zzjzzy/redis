@@ -550,6 +550,7 @@ typedef enum {
 #define PROTECTED_ACTION_ALLOWED_LOCAL 2
 
 /* Sets operations codes */
+// t_set.c中set的集合操作：并集、差集、交集
 #define SET_OP_UNION 0
 #define SET_OP_DIFF 1
 #define SET_OP_INTER 2
@@ -651,7 +652,7 @@ typedef enum {
  * character for configuration purposes. */
 #define NOTIFY_KEYSPACE (1<<0)    /* K */
 #define NOTIFY_KEYEVENT (1<<1)    /* E */
-#define NOTIFY_GENERIC (1<<2)     /* g */
+#define NOTIFY_GENERIC (1<<2)     /* g */ // generic是通用命令，也就是可以用于任何类型key的命令，比如del
 #define NOTIFY_STRING (1<<3)      /* $ */
 #define NOTIFY_LIST (1<<4)        /* l */
 #define NOTIFY_SET (1<<5)         /* s */
@@ -2019,6 +2020,7 @@ struct redisServer {
     /* Lazy free */
     int lazyfree_lazy_eviction;
     int lazyfree_lazy_expire;
+    // t_set.c中的用法：server.lazyfree_lazy_server_del ? shared.unlink : shared.del;
     int lazyfree_lazy_server_del;
     int lazyfree_lazy_user_del;
     int lazyfree_lazy_user_flush;

@@ -30,6 +30,7 @@
 #include "server.h"
 #include "intset.h"  /* Compact integer set structure */
 
+// set, 底层编码是intset or listpack or dict
 /*-----------------------------------------------------------------------------
  * Set Commands
  *----------------------------------------------------------------------------*/
@@ -702,6 +703,7 @@ void smoveCommand(client *c) {
 
     /* Create the destination set when it doesn't exist */
     if (!dstset) {
+        // setTypeCreate的value参数只是用来判断是否是数字，不会在创建set的时候被add进去
         dstset = setTypeCreate(ele->ptr, 1);
         dbAdd(c->db,c->argv[2],dstset);
     }
@@ -749,6 +751,7 @@ void smismemberCommand(client *c) {
     }
 }
 
+// cardinality:[基数]的缩写，在数学 / 集合论中，“基数” 特指一个集合中不重复元素的个数
 void scardCommand(client *c) {
     robj *o;
 
@@ -836,9 +839,13 @@ void spopWithCountCommand(client *c) {
      * CASE 2: The number of elements to return is small compared to the
      * set size. We can just extract random elements and return them to
      * the set. */
+    // remaining*5还大于count，说明剩余的很多，需要pop的数据量远小于set size
     if (remaining*SPOP_MOVE_STRATEGY_MUL > count &&
         set->encoding == OBJ_ENCODING_LISTPACK)
     {
+        // 这个if做的操作：从listpack中随机取count个元素，这些元素先放到**ps中，最后统一在listpack中删除
+        // 每次取出一个元素，就addReplyBulkCBuffer写到client中
+        // 同时通过propargv把删除的元素写成srem命令
         /* Specialized case for listpack. Traverse it only once. */
         unsigned char *lp = set->ptr;
         unsigned char *p = lpFirst(lp);
@@ -849,15 +856,19 @@ void spopWithCountCommand(client *c) {
             unsigned int len;
             str = (char *)lpGetValue(p, &len, (long long *)&llele);
 
+            // 把获取的元素写到client中
             if (str) {
                 addReplyBulkCBuffer(c, str, len);
+                // 移除的元素写到propargv中，propargv前两个元素是srem key，后续用这个来写srem命令
                 propargv[propindex++] = createStringObject(str, len);
             } else {
                 addReplyBulkLongLong(c, llele);
                 propargv[propindex++] = createStringObjectFromLongLong(llele);
             }
             /* Replicate/AOF this command as an SREM operation */
+            // 因为是按批些的，所以达到批次限制后，要先写一次，然后重置propindex
             if (propindex == 2 + batchsize) {
+                // ZZJ TODO 这个还没看
                 alsoPropagate(c->db->id, propargv, propindex, PROPAGATE_AOF | PROPAGATE_REPL);
                 for (unsigned long j = 2; j < propindex; j++) {
                     decrRefCount(propargv[j]);
@@ -874,6 +885,7 @@ void spopWithCountCommand(client *c) {
         zfree(ps);
         set->ptr = lp;
     } else if (remaining*SPOP_MOVE_STRATEGY_MUL > count) {
+        // remaining数量很大，set编码不是listpack
         for (unsigned long i = 0; i < count; i++) {
             propargv[propindex] = setTypePopRandom(set);
             addReplyBulk(c, propargv[propindex]);
@@ -896,6 +908,7 @@ void spopWithCountCommand(client *c) {
      * creating a new set as we do this (that will be stored as the original
      * set). Then we return the elements left in the original set and
      * release it. */
+    // 需要返回的count很大，此时从set中随机选remaining个元素放到新set中，然后把剩余的元素返回。
         robj *newset = NULL;
 
         /* Create a new set with just the remaining elements. */
@@ -915,8 +928,10 @@ void spopWithCountCommand(client *c) {
                 p = lpNext(lp, p);
                 index++;
             }
+            // ps是用来在lp中删除元素用的
             lp = lpBatchDelete(lp, ps, remaining);
             zfree(ps);
+            // 走到这里，set->ptr中保存的是需要pop的元素，newset中是需要保留的元素
             set->ptr = lp;
         } else {
             while(remaining--) {
@@ -929,6 +944,7 @@ void spopWithCountCommand(client *c) {
             }
         }
 
+        // 走到这里，set->ptr中保存的是需要pop的元素，newset中是需要保留的元素
         /* Transfer the old set to the client. */
         setTypeIterator *si;
         si = setTypeInitIterator(set);
@@ -984,6 +1000,7 @@ void spopCommand(client *c) {
         return;
     }
 
+    // 走到这里，命令是<3，也就是spop key(没有指定count)
     /* Make sure a key with the name inputted exists, and that it's type is
      * indeed a set */
     if ((set = lookupKeyWriteOrReply(c,c->argv[1],shared.null[c->resp]))
@@ -1025,6 +1042,7 @@ void spopCommand(client *c) {
  * the number of randoms per time. */
 #define SRANDFIELD_RANDOM_SAMPLE_LIMIT 1000
 
+// 和spopWithCountCommand对比，这个返回随机元素，但是不弹出元素
 void srandmemberWithCountCommand(client *c) {
     long l;
     unsigned long count, size;
@@ -1037,6 +1055,7 @@ void srandmemberWithCountCommand(client *c) {
     dict *d;
 
     if (getRangeLongFromObjectOrReply(c,c->argv[2],-LONG_MAX,LONG_MAX,&l,NULL) != C_OK) return;
+    // l的正负控制是否可以返回重复元素
     if (l >= 0) {
         count = (unsigned long) l;
     } else {
@@ -1079,6 +1098,7 @@ void srandmemberWithCountCommand(client *c) {
                     else
                         addReplyBulkLongLong(c, entries[i].lval);
                 }
+                // ZZJ TODO 这个判断不太明白
                 if (c->flags & CLIENT_CLOSE_ASAP)
                     break;
             }
@@ -1159,6 +1179,7 @@ void srandmemberWithCountCommand(client *c) {
      * This is done because if the number of requested elements is just
      * a bit less than the number of elements in the set, the natural approach
      * used into CASE 4 is highly inefficient. */
+    // case3，把set中所有元素先放到dict中，然后从dict中删除size-count个元素，剩下的就是count个需要返回的元素
     if (count*SRANDMEMBER_SUB_STRATEGY_MUL > size) {
         setTypeIterator *si;
 
@@ -1244,6 +1265,7 @@ void srandmemberCommand(client *c) {
         return;
     }
 
+    // 走到这里，c->argc=2，也就是不指定count的sranmember key 命令
     /* Handle variant without <count> argument. Reply with simple bulk string */
     if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]))
         == NULL || checkType(c,set,OBJ_SET)) return;
@@ -1282,6 +1304,8 @@ int qsortCompareSetsByRevCardinality(const void *s1, const void *s2) {
  * 'limit' work for SINTERCARD, stop searching after reaching the limit.
  * Passing a 0 means unlimited.
  */
+// 总结一下这个方法：就是对setkeys中的元素取交集，如果cardinality_only=true，就只返回交集个数
+// 如果dstkey!=NULL，就将交集结果放到dstkey中，否则将交集结果返回client
 void sinterGenericCommand(client *c, robj **setkeys,
                           unsigned long setnum, robj *dstkey,
                           int cardinality_only, unsigned long limit) {
@@ -1360,6 +1384,7 @@ void sinterGenericCommand(client *c, robj **setkeys,
             dstset = createSetListpackObject();
         }
     } else if (!cardinality_only) {
+        // DeferredLen应该是延迟写入的意思，就是过会再写结果
         replylen = addReplyDeferredLen(c);
     }
 
@@ -1378,7 +1403,11 @@ void sinterGenericCommand(client *c, robj **setkeys,
 
         /* Only take action when all sets contain the member */
         if (j == setnum) {
+            // cardinality_only就是只返回交集集合的个数，
+            // 否则就是需要返回交集集合所有元素，这个交集是返回到client，还是封装到一个dstset，由dstkey参数控制
+            // dstkey有值，就不需要写到client，放到dstset中就行，dstset最后会被保存到dstkey中
             if (cardinality_only) {
+                // cardinality记录的是交集的元素个数
                 cardinality++;
 
                 /* We stop the searching after reaching the limit. */

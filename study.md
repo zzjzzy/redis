@@ -34,7 +34,7 @@ quicklist(adlist+listpack的混合,list的唯一实现) 看完了
 ===== t系列 =====
 t_hash(1175行) 已看完
 t_list(1388行) 已看完
-t_set(1680行)  正在看，看到saddCommand了
+t_set(1680行)  正在看，看到sinterCommand了
 t_string(1009行) 已看完
 t_zset(4461行)
 t_stream(4051行)
