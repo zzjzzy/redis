@@ -78,6 +78,16 @@ zskiplistNode *zslCreateNode(int level, double score, sds ele) {
     return zn;
 }
 
+// 初始创建的zsl内存结构
+/**
+ * | *header | *tail | long length=0 | int level=1 |
+ * |    ↓    |   ↓   |
+ * |   如下  |  NULL |
+ * *header内存结构
+ * | sds(*char) ele | double score=0 | *backword | [| *forward | long span=0 |][| *forward | long span=0 |]...(32个) |
+ * |       ↓        |                |    ↓      |      ↓      |
+ * |   "abc..."     |                |    NULL   |     NULL    |
+ */
 /* Create a new skiplist. */
 zskiplist *zslCreate(void) {
     int j;

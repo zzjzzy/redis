@@ -1,0 +1,10 @@
+{
+  "多次插入数据分析": [
+    {
+      "desc": "首次插入，score=10, ele=a, randLevel=3，zadd是通过zsetTypeCreate创建的zsl",
+      "result": {
+
+      }
+    }
+  ]
+}

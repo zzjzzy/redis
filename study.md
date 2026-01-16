@@ -36,7 +36,7 @@ t_hash(1175行) 已看完
 t_list(1388行) 已看完
 t_set(1680行)  已看完
 t_string(1009行) 已看完
-t_zset(4461行)
+t_zset(4461行) 正在看 看到zslInsert
 t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 
@@ -64,6 +64,7 @@ zipmap.c 不用学
 
 
 ## TODO 
+### 有空再总结下各个基础数据结构的实现：结构、数据怎么编码的、怎么存储的
 ### sds的这个特性【an SDS string is always an odd pointer 】再深入研究下，用在dict中有什么优势？
 ### 看下代码里的ZZJ TODO
 ### t_string.c的lcsCommand没细看，需要研究下
