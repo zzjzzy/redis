@@ -149,34 +149,56 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
     serverAssert(!isnan(score));
     x = zsl->header;
-    for (i = zsl->level-1; i >= 0; i--) {
+    for (i = zsl->level-1; i >= 0; i--) { // #for1
         /* store rank that is crossed to reach the insert position */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
+        // 对于3次插入，i=3是，x已经被跟新为了cde，cde.level[3].forward是null
+        // 对于3次插入，i=2是，x已经被跟新为了cde, cde.level[2].forward是abc
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
                     (x->level[i].forward->score == score &&
                     sdscmp(x->level[i].forward->ele,ele) < 0)))
         {
+            // 对于3次插入，一次循环后，x被更新为了2次插入的cde
             rank[i] += x->level[i].span;
             x = x->level[i].forward;
         }
         update[i] = x;
     }
+    // 首次插入：假如score=10, ele=abc
+    // 首次插入：rank[0...31]=0，update[0]=zsl.header, update[1...31]=NULL
+    // 2次插入：假如score=5, ele=cde
+    // 2次插入：rank[0...2]=0(因为while循环没进去),update[0...2]=zsl.header,update[3...31]=NULL
+    // 3次插入：假如score=7, ele=efg
+    // 3次插入：rank[4]=1(while循环里将rank[4]更新header.level[4].span),rank[3]=1,rank[2]=1,rank[1]=1,rank[0]=1
+    // 3次插入：update[4...0]=cde
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
     level = zslRandomLevel();
+    // 3此插入，level=2，不大于zsl.level=5
     if (level > zsl->level) {
-        for (i = zsl->level; i < level; i++) {
+        for (i = zsl->level; i < level; i++) { // #for2
             rank[i] = 0;
             update[i] = zsl->header;
-            update[i]->level[i].span = zsl->length;
+            update[i]->level[i].span = zsl->length; // 这里设置update[i]其实就是设置zsl.header
         }
         zsl->level = level;
     }
+    // 首次插入：假如随机获取的level=3，到这里rank[1...2]=0(#for2循环的范围是1...2), zsl.level=3
+    // update[1...2]=zsl.header, update[1].level[1].span=0, update[2].level[2].span=0
+    // #for1循环是设置rank&update[0...zsl.level-1]
+    // #for2循环是设置rank&update[zsl.level...randomLevel-1]
+    // 2次插入：假如随机获取的level=5，到这里rank[3...4]=0(#for2循环的范围是3...4), zsl.level=5
+    // update[3...4]=zsl.header, update[3](也就是header).level[3].span=1,update[4](也就是header).level[4].span=1
+    // 3次插入：level=2
     x = zslCreateNode(level,score,ele);
-    for (i = 0; i < level; i++) {
+    // 首次插入：到这里x={ele:abc,score:10,backward=null,level[3]:"数组中都是NULL"}
+    // 2次插入：到这里x={ele:cde,score:5,backward=null,level[5]:"数组中都是NULL"}
+    // 3次插入：到这里x={ele:efg,score:7,backward=null,level[2]:"数组中都是NULL"}
+    for (i = 0; i < level; i++) { // #for3
+        // 这里有个替换，把新建node x的forward指向update的forward，把update的forward指向x
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
 
@@ -184,8 +206,12 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
-
+    // 首次插入：#for3是更新了x.level[0...2]，同时更新了update[0...2]
+    // 2次插入：#for3是更新了x.level[0...4]，同时更新了update[0...4]
     /* increment span for untouched levels */
+    // 首次插入：由于zsl->level=1，而随机level取值范围是[1,32]，所以这个for循环不会执行
+    // 2次插入：由于zsl.level=5, level=5，所以这个for循环不会执行
+    // 3次插入：由于zsl.level=5, level=2，所以这个for循环不会执行
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
