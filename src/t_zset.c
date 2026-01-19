@@ -218,7 +218,7 @@ int zslRandomLevel(void) {
   * score=680 -| | | | |
   * rank[0.5] 4|3|3|1|0|0
   */
-// ZZJ TODO 还没理解，有空再研究
+// 已看，基本看明白了，不过还是有些复杂，自己是写不出来的
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned long rank[ZSKIPLIST_MAXLEVEL];
@@ -268,20 +268,48 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
      * 看每一行代码的注释
      */
     for (i = 0; i < level; i++) { // #for3
-        // 这行一
+        /**
+         * 这一行的作用是将x(新节点)[0...newLevel]的forward指向应该指向的下一个节点，应该指向的下一个节点是哪个？就是update[i].level[i].forward
+         * 可以这样理解，update[i]中保存的是从x应该插入的位置往前看，能看到的某个“露头”的节点，这个节点之所以可以露头，就是因为update[i].level[i]漏出来了
+         * 而update[i].level[i]能漏出来，说明update[i+1...到我站的位置]没有节点能挡住它，所以，update[i].level[i].forward一定是指向我背后的某个节点(比如y)，
+         * 那这个y的score是大于targetScore的，也是新节点x的level[i].forward应该指向的节点
+         */
         x->level[i].forward = update[i]->level[i].forward;
+        /**
+         * 这一行就好理解了，x的后续节点是update[i]->level[i].forward，update[i]->level[i].forward前序节点自然就是x
+         */
         update[i]->level[i].forward = x;
 
         /* update span covered by update[i] as x is inserted here */
+        /**
+         * 对这一行的理解，直接看图t_zset_x_level_i_span_update_shilitu.jpg
+         */
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
+        /**
+         * 对于这一行的理解，也直接看图t_zset_update_i_level_i_span_update_shilitu.jpg
+         */
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
     /* increment span for untouched levels */
+    /**
+     * 对这个for循环的理解
+     * 如果newLevel>zsl.level，这种情况，前面有个if已经把zsl.level更新为newLevel了，所以这个for不会执行
+     * 如果newLevel=zsl.level，也不会执行
+     * 对于newLevel<zsl.level，#for3只更新了update[0...newLevel-1]，update[level...zsl.level-1]需要在这个for循环更新
+     * update[level...zsl.level-1]由于x.level没那么长，x挡不到它们，它们的forward还是原来的，但是因为插入了个x，厚度增加了一层
+     * 所以需要将span++
+     */
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
 
+    /**
+     * 这一行就好理解了吧，不多说了
+     */
     x->backward = (update[0] == zsl->header) ? NULL : update[0];
+    /**
+     * 下面这个if else也好理解
+     */
     if (x->level[0].forward)
         x->level[0].forward->backward = x;
     else
@@ -294,6 +322,10 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
  * zslDeleteRangeByRank. */
 void zslDeleteNode(zskiplist *zsl, zskiplistNode *x, zskiplistNode **update) {
     int i;
+    /**
+     * update和前面zslInsert中的update含义一样，这个是已经在其他方法设置好传过来的
+     * 这个for循环还是想象一下图，很好理解
+     */
     for (i = 0; i < zsl->level; i++) {
         if (update[i]->level[i].forward == x) {
             update[i]->level[i].span += x->level[i].span - 1;
@@ -337,6 +369,9 @@ int zslDelete(zskiplist *zsl, double score, sds ele, zskiplistNode **node) {
     }
     /* We may have multiple elements with the same score, what we need
      * is to find the element with both the right score and object. */
+    /**
+     * x现在是x.score<score，然后执行x = x->level[0].forward;，x.score就是>=score
+     */
     x = x->level[0].forward;
     if (x && score == x->score && sdscmp(x->ele,ele) == 0) {
         zslDeleteNode(zsl, x, update);
@@ -386,6 +421,7 @@ zskiplistNode *zslUpdateScore(zskiplist *zsl, double curscore, sds ele, double n
     /* If the node, after the score update, would be still exactly
      * at the same position, we can just update the score without
      * actually removing and re-inserting the element in the skiplist. */
+    // x如果不需要移动位置，直接更新score
     if ((x->backward == NULL || x->backward->score < newscore) &&
         (x->level[0].forward == NULL || x->level[0].forward->score > newscore))
     {
@@ -443,6 +479,9 @@ zskiplistNode *zslFirstInRange(zskiplist *zsl, zrangespec *range) {
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
         /* Go forward while *OUT* of range. */
+        /**
+         * !zslValueGteMin(...)就是score要>range.min，这样while循环后，x是在range的“外面”(x.score是比min还小)
+         */
         while (x->level[i].forward &&
             !zslValueGteMin(x->level[i].forward->score,range))
                 x = x->level[i].forward;
@@ -469,6 +508,10 @@ zskiplistNode *zslLastInRange(zskiplist *zsl, zrangespec *range) {
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
         /* Go forward while *IN* range. */
+        /**
+         * 如果x.level[i].forward.score比range.max还大，说明不在范围内
+         * while结束后,x.score就是<=range.max的
+         */
         while (x->level[i].forward &&
             zslValueLteMax(x->level[i].forward->score,range))
                 x = x->level[i].forward;
