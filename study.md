@@ -36,7 +36,7 @@ t_hash(1175行) 已看完
 t_list(1388行) 已看完
 t_set(1680行)  已看完
 t_string(1009行) 已看完
-t_zset(4461行) 正在看 看到zslInsert
+t_zset(4461行) 正在看 看到zslDeleteRangeByScore（zslInsert有空再研究）
 t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 

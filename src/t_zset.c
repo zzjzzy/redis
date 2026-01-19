@@ -60,6 +60,19 @@
 #include "intset.h"  /* Compact integer set structure */
 #include <math.h>
 
+/**
+ * 跳表的一些个人理解：
+ * - 如果所有节点level=1，跳表就退化成了双端链表
+ * - 所以跳表是双端链表的特殊形式
+ * - 双端链表想要查找一个元素，只能遍历整个链表，复杂度是O(n)，跳表是如何优化双端链表的呢
+ * - 链表是只会记录下一个元素，跳表是做了扩展，每个节点会保存一个数组，数组里记录的是后续n个比当前元素大的元素。
+ * - 这样查询后续元素位置时，可以先在数组中通过二分查找确定下一个元素的位置，然后直接跳到下一个元素查找
+ * - 比如在score=1的数组中存了score=3,5,7，我要查找6，直接跳到5去查找就行了，不用挨个往后查找。
+ *
+ * - 如果每个排序元素的level都比前一个元素大1，header中的数组就可以存每个元素。只需二分查找header就能找到某个元素。
+ * - 可以理解为数组和链表的组合
+ * - 每个node.level[0]一定是存的下一个更大的元素，所以如果不看node.level[1...]，只看node.level[0]，其实就是个双端链表
+ */
 /*-----------------------------------------------------------------------------
  * Skiplist implementation of the low level API
  *----------------------------------------------------------------------------*/
@@ -120,6 +133,7 @@ void zslFree(zskiplist *zsl) {
 
     zfree(zsl->header);
     while(node) {
+        // node.level[0]一定是存的链表的下一个元素，所以通过遍历node.level[0]就可以遍历到所有node
         next = node->level[0].forward;
         zslFreeNode(node);
         node = next;
@@ -142,6 +156,70 @@ int zslRandomLevel(void) {
 /* Insert a new node in the skiplist. Assumes the element does not already
  * exist (up to the caller to enforce that). The skiplist takes ownership
  * of the passed SDS string 'ele'. */
+/**
+ * 对于如下这段代码的理解
+ * x = zsl.header
+ * for (i = zsl.level-1; i >= 0; i--) {
+ *   while (x.level[i].forward && x.level[i].forward.score < score) {
+ *     x = x.level[i].forward
+ *   }
+ *   update[i] = x
+ * }
+ * 首先可以明确的是，通过while条件可以判断，x满足x.forward.score<score才会被赋值x，所以update[i]中存的要么是header，要么是x.score<score的节点
+ * 举个例子，假如header.level=5, header.level[0...4].score={500,600,600,700,700},600后面还有一个650的被600挡住没浮上来，500后面有个550也没浮上来
+ * 1. targetScore=700，zsl.level=5, zsl.header[i].forward肯定都是存在的，且随着i减小score递减。减到i=2时header.level[2].forward.score(=600)<score
+ * 2. x被赋值为ele(score=600)，如果ele(score=600)在header能被看见，说明ele(score=600)的level肯定是3(索引0-2)
+ * 3. x被赋值为ele(score=600)后，while循环继续，不过注意这时候x不是header了，已经被跳到ele(score=600)了，i取值也是在ele(score=600).level上取
+ * 4. 能跳到ele(score=600)，说明大于ele(score=600)小于ele(score=700)的节点肯定都被ele(score=600)挡住了，这些节点的level肯定<=3
+ * 5.1 假如ele(score=650).level=2，则ele(score=600).level[2].forward=NULL,while循环结束，update[2]=ele(score=600)
+ * 6. i--(i=1)，ele(score=600).level[1].forward=ele(score=650)，满足while，x被赋值ele(score=650)，ele(score=650).level[1]不满足while，update[1]=ele(score=650)
+ * 7. i--(i=0), ele(score=650).ele[0]不满足while条件，update[0]=ele(score=650)
+ * 8. 最终update[4...0]={header, header, ele(score=600), ele(score=650), ele(score=650)}, 所以update[i]中存的都是小于targetScore的，但不是全部哦，比如ele(score=500)就没有
+ *
+ * 5.2 假如ele(score=650).level=3，则ele(score=600).level[2].forward=ele(score=650),while循环继续，x被赋值为ele(score=650)，由于ele(score=650)的level元素都>=700，while循环结束，update[2]=ele(score=650)
+ * 6. i--(i=1)，ele(score=650).level[1].forward=ele(score=700)，不满足while，update[1]=ele(score=650)
+ * 7. i--(i=0)，ele(score=650).level[1].forward=ele(score=700)，不满足while，update[1]=ele(score=650)
+ * 8. 最终update[4...0]={header, header, ele(score=650), ele(score=650), ele(score=650)}
+ *
+ * 我要插入一个节点，由于这个节点的level还未知，在插入节点后的节点的level肯定不受影响，（只有一个backward需要更新），但是插入节点前的元素需要更新level
+ * 所以update中记录的就是需要更新level的节点，那哪些节点需要更新level呢？先找到第一个小于targetScore的节点，这个节点就是小于targetScore，并且level最长的节点x
+ * x前面的节点level肯定都不需要更新，因为x的level比前面节点都长，x可以帮前面节点拦住
+ * x后面的节点肯定有需要更新的，至于x是否需要更新，要看x后的节点的level是小于x.level还是小于等于x.level
+ *
+ * update[i]可以分为两部分
+ * 1. header：这一部分是都是score>targetScore的
+ * 2. xxx：这一部分元素的取值可以这样理解，将ele.score<targetScore的所有元素从前往后看)，个儿最高的那个，以及他后面的那些会被更新到update[i]中
+ * 图实例（从上到下score逐渐增大）
+ * update[i]
+ * score=600 ----
+ * score=650 --
+ * score=670 ---
+ * score=680 -
+ * 从score=680(小于700的)往score=600看，能看到的就会被放到update[i]中【解释：因为目标节点要插入到score=680后面，所以从score=680向前看，能看到的都可能需要更新下level】
+ * 比如上面的例子，update[0...3]={score=680, score=670, score=670, score=600}
+ */
+ /**
+  * 对如下代码的理解：
+  * x = zsl.header
+  * for (i = zsl.level-1; i >= 0; i--) {
+  *   rank[i] = i == zsl.level-1 ? 0 : rank[i+1];
+  *   while (x.level[i].forward && x.level[i].forward.score < score) {
+  *     rank[i] += x.level[i].span;
+  *     x = x->level[i].forward;
+  *   }
+  * }
+  * 看这段代码，以及后面rank的用法，可以明确，rank是用来更新span的
+  * 那先明确下span的含义:span可以理解为上浮了多少，或者说一个节点跨了多少节点被上浮了，比如一个x，按照顺序是在索引5处，但是它被上浮保存到了索引3处的level中，3处保存的x的span就是5-3=2
+  * 图实例：还是以targetScore=700为例，rank中保存的是从score=680向前看，能看到的“厚度”-1
+  * header    -|-|-|-|-|-
+  * score=600 -|-|-|-| |
+  * score=650 -|-| | | |
+  * score=670 -|-|-| | |
+  * score=680 -| | | | |
+  * rank[0.5] 4|3|3|1|0|0
+  * 有了上面的理解，比如我要在score=680后面再插入一个元素，TODO 如何根据rank更新span的？
+  */
+// ZZJ TODO 还没理解，有空再研究
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned long rank[ZSKIPLIST_MAXLEVEL];
@@ -149,56 +227,36 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
 
     serverAssert(!isnan(score));
     x = zsl->header;
+    // zsl.header[0...zsl.level-1]一定是有值的
     for (i = zsl->level-1; i >= 0; i--) { // #for1
         /* store rank that is crossed to reach the insert position */
         rank[i] = i == (zsl->level-1) ? 0 : rank[i+1];
-        // 对于3次插入，i=3是，x已经被跟新为了cde，cde.level[3].forward是null
-        // 对于3次插入，i=2是，x已经被跟新为了cde, cde.level[2].forward是abc
         while (x->level[i].forward &&
                 (x->level[i].forward->score < score ||
                     (x->level[i].forward->score == score &&
                     sdscmp(x->level[i].forward->ele,ele) < 0)))
         {
-            // 对于3次插入，一次循环后，x被更新为了2次插入的cde
             rank[i] += x->level[i].span;
             x = x->level[i].forward;
         }
+        // update[i]的取值已经理解了，看zslInsert的注释
         update[i] = x;
     }
-    // 首次插入：假如score=10, ele=abc
-    // 首次插入：rank[0...31]=0，update[0]=zsl.header, update[1...31]=NULL
-    // 2次插入：假如score=5, ele=cde
-    // 2次插入：rank[0...2]=0(因为while循环没进去),update[0...2]=zsl.header,update[3...31]=NULL
-    // 3次插入：假如score=7, ele=efg
-    // 3次插入：rank[4]=1(while循环里将rank[4]更新header.level[4].span),rank[3]=1,rank[2]=1,rank[1]=1,rank[0]=1
-    // 3次插入：update[4...0]=cde
     /* we assume the element is not already inside, since we allow duplicated
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
     level = zslRandomLevel();
-    // 3此插入，level=2，不大于zsl.level=5
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) { // #for2
             rank[i] = 0;
             update[i] = zsl->header;
-            update[i]->level[i].span = zsl->length; // 这里设置update[i]其实就是设置zsl.header
+            update[i]->level[i].span = zsl->length;
         }
         zsl->level = level;
     }
-    // 首次插入：假如随机获取的level=3，到这里rank[1...2]=0(#for2循环的范围是1...2), zsl.level=3
-    // update[1...2]=zsl.header, update[1].level[1].span=0, update[2].level[2].span=0
-    // #for1循环是设置rank&update[0...zsl.level-1]
-    // #for2循环是设置rank&update[zsl.level...randomLevel-1]
-    // 2次插入：假如随机获取的level=5，到这里rank[3...4]=0(#for2循环的范围是3...4), zsl.level=5
-    // update[3...4]=zsl.header, update[3](也就是header).level[3].span=1,update[4](也就是header).level[4].span=1
-    // 3次插入：level=2
     x = zslCreateNode(level,score,ele);
-    // 首次插入：到这里x={ele:abc,score:10,backward=null,level[3]:"数组中都是NULL"}
-    // 2次插入：到这里x={ele:cde,score:5,backward=null,level[5]:"数组中都是NULL"}
-    // 3次插入：到这里x={ele:efg,score:7,backward=null,level[2]:"数组中都是NULL"}
     for (i = 0; i < level; i++) { // #for3
-        // 这里有个替换，把新建node x的forward指向update的forward，把update的forward指向x
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
 
@@ -206,12 +264,7 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
         x->level[i].span = update[i]->level[i].span - (rank[0] - rank[i]);
         update[i]->level[i].span = (rank[0] - rank[i]) + 1;
     }
-    // 首次插入：#for3是更新了x.level[0...2]，同时更新了update[0...2]
-    // 2次插入：#for3是更新了x.level[0...4]，同时更新了update[0...4]
     /* increment span for untouched levels */
-    // 首次插入：由于zsl->level=1，而随机level取值范围是[1,32]，所以这个for循环不会执行
-    // 2次插入：由于zsl.level=5, level=5，所以这个for循环不会执行
-    // 3次插入：由于zsl.level=5, level=2，所以这个for循环不会执行
     for (i = level; i < zsl->level; i++) {
         update[i]->level[i].span++;
     }
@@ -357,9 +410,11 @@ int zslIsInRange(zskiplist *zsl, zrangespec *range) {
         return 0;
     x = zsl->tail;
     if (x == NULL || !zslValueGteMin(x->score,range))
+        // tail存的最大值，如果最大值的score比range的最小值都小，说明不存在
         return 0;
     x = zsl->header->level[0].forward;
     if (x == NULL || !zslValueLteMax(x->score,range))
+        // header.level[0].forward存的是最小值，如果最小值比range的最大值都大，说明不存在
         return 0;
     return 1;
 }
