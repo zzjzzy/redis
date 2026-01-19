@@ -210,14 +210,13 @@ int zslRandomLevel(void) {
   * }
   * 看这段代码，以及后面rank的用法，可以明确，rank是用来更新span的
   * 那先明确下span的含义:span可以理解为上浮了多少，或者说一个节点跨了多少节点被上浮了，比如一个x，按照顺序是在索引5处，但是它被上浮保存到了索引3处的level中，3处保存的x的span就是5-3=2
-  * 图实例：还是以targetScore=700为例，rank中保存的是从score=680向前看，能看到的“厚度”-1
+  * 图示例：还是以targetScore=700为例，rank中保存的是从score=680向前看，能看到的“厚度”减1
   * header    -|-|-|-|-|-
   * score=600 -|-|-|-| |
   * score=650 -|-| | | |
   * score=670 -|-|-| | |
   * score=680 -| | | | |
   * rank[0.5] 4|3|3|1|0|0
-  * 有了上面的理解，比如我要在score=680后面再插入一个元素，TODO 如何根据rank更新span的？
   */
 // ZZJ TODO 还没理解，有空再研究
 zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
@@ -246,17 +245,30 @@ zskiplistNode *zslInsert(zskiplist *zsl, double score, sds ele) {
      * scores, reinserting the same element should never happen since the
      * caller of zslInsert() should test in the hash table if the element is
      * already inside or not. */
+    /**
+     * 对下面这个if的理解
+     * level大于zsl.level，说明level被扩展了
+     * 根据前面的理解，rank表示的是看到的“厚度”，所以rank[zsl.level...newLevel]全都被赋值0
+     * 根据前面的理解，update保存的是从后向前看能看到的“露头”的节点，由于[zsl.level...newLevel]没有节点
+     * 所以update[zsl.level...newLevel]被更新为zsl.header
+     */
     level = zslRandomLevel();
     if (level > zsl->level) {
         for (i = zsl->level; i < level; i++) { // #for2
             rank[i] = 0;
             update[i] = zsl->header;
+            // ZZJ TODO 这个赋值为zsl.length还不太理解，看后面怎么用的，再理解
             update[i]->level[i].span = zsl->length;
         }
         zsl->level = level;
     }
     x = zslCreateNode(level,score,ele);
+    /**
+     * 对于这个for循环的理解
+     * 看每一行代码的注释
+     */
     for (i = 0; i < level; i++) { // #for3
+        // 这行一
         x->level[i].forward = update[i]->level[i].forward;
         update[i]->level[i].forward = x;
 
