@@ -536,6 +536,11 @@ unsigned long zslDeleteRangeByScore(zskiplist *zsl, zrangespec *range, dict *dic
     int i;
 
     x = zsl->header;
+    /**
+     * 这个for循环的update赋值和zslInsert本质是一样，range.min就是zslInsert的参数score
+     * !zslValueGteMin就是score要<min，和zslInsert中的判断也是一样的
+     * 所以这里的update含义和zslInsert是一样的
+     */
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward &&
             !zslValueGteMin(x->level[i].forward->score, range))
@@ -558,6 +563,7 @@ unsigned long zslDeleteRangeByScore(zskiplist *zsl, zrangespec *range, dict *dic
     return removed;
 }
 
+// ZZJ TODO 这个没明白，这种情况下zsl不是按照score排序的，是按照字典序排序的？
 unsigned long zslDeleteRangeByLex(zskiplist *zsl, zlexrangespec *range, dict *dict) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned long removed = 0;
@@ -589,6 +595,7 @@ unsigned long zslDeleteRangeByLex(zskiplist *zsl, zlexrangespec *range, dict *di
 
 /* Delete all the elements with rank between start and end from the skiplist.
  * Start and end are inclusive. Note that start and end need to be 1-based */
+// start和end是索引，删除位置[start,end]的元素
 unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned int end, dict *dict) {
     zskiplistNode *update[ZSKIPLIST_MAXLEVEL], *x;
     unsigned long traversed = 0, removed = 0;
@@ -596,6 +603,7 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
 
     x = zsl->header;
     for (i = zsl->level-1; i >= 0; i--) {
+        // 这个while循环就是根据span跳过索引小于start的节点
         while (x->level[i].forward && (traversed + x->level[i].span) < start) {
             traversed += x->level[i].span;
             x = x->level[i].forward;
@@ -621,6 +629,7 @@ unsigned long zslDeleteRangeByRank(zskiplist *zsl, unsigned int start, unsigned 
  * Returns 0 when the element cannot be found, rank otherwise.
  * Note that the rank is 1-based due to the span of zsl->header to the
  * first element. */
+// 这里的rank其实就是索引，只不过索引是从1开始
 unsigned long zslGetRank(zskiplist *zsl, double score, sds ele) {
     zskiplistNode *x;
     unsigned long rank = 0;
@@ -716,6 +725,7 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
   *
   * If the string is not a valid range C_ERR is returned, and the value
   * of *dest and *ex is undefined. */
+// 已看，解析字母序的range，这个是只会返回一个range，+代表最大值，-代表最小值
 int zslParseLexRangeItem(robj *item, sds *dest, int *ex) {
     char *c = item->ptr;
 
