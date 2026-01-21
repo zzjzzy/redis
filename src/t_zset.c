@@ -836,6 +836,8 @@ zskiplistNode *zslFirstInLexRange(zskiplist *zsl, zlexrangespec *range) {
         /* Go forward while *OUT* of range. */
         while (x->level[i].forward &&
             !zslLexValueGteMin(x->level[i].forward->ele,range))
+            // 满足while条件x才会赋值，所以for循环结束后x指向的是<min的节点，不过是小于min的节点中最大的那个
+            // x后面那个就是大于等于min的 TODO ZZJ 这个看明白了，不过有空还是可以再研究下，看有没有更好理解的思路
                 x = x->level[i].forward;
     }
 
@@ -875,6 +877,8 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
 
 /*-----------------------------------------------------------------------------
  * Listpack-backed sorted set API
+ * 看到zzlInsert明白了，这一部分的实现和typedef struct zskiplist完全没关系
+ * 就是用listpack来实现有序set
  *----------------------------------------------------------------------------*/
 
 double zzlStrtod(unsigned char *vstr, unsigned int vlen) {

@@ -1955,7 +1955,9 @@ struct redisServer {
     size_t set_max_listpack_entries;
     // t_set.c 限制listpack中单个元素的大小，超过则用dict
     size_t set_max_listpack_value;
+    // t_zset.c 中判断是用listpack编码还是用skiplist编码
     size_t zset_max_listpack_entries;
+    // t_zset.c 中判断是用listpack编码还是用skiplist编码
     size_t zset_max_listpack_value;
     size_t hll_sparse_max_bytes;
     size_t stream_node_max_bytes;
@@ -2965,6 +2967,7 @@ void ACLRecomputeCommandBitsFromCommandRulesAllUsers(void);
 
 /* Sorted sets data type */
 
+// t_zset中zsetAdd使用的flag
 /* Input flags. */
 #define ZADD_IN_NONE 0
 #define ZADD_IN_INCR (1<<0)    /* Increment the score instead of setting it. */
@@ -2973,6 +2976,7 @@ void ACLRecomputeCommandBitsFromCommandRulesAllUsers(void);
 #define ZADD_IN_GT (1<<3)      /* Only update existing when new scores are higher. */
 #define ZADD_IN_LT (1<<4)      /* Only update existing when new scores are lower. */
 
+// t_zset中zsetAdd使用的flag
 /* Output flags. */
 #define ZADD_OUT_NOP (1<<0)     /* Operation not performed because of conditionals.*/
 #define ZADD_OUT_NAN (1<<1)     /* Only touch elements already existing. */

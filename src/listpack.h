@@ -46,6 +46,8 @@
 #define LP_REPLACE 2
 
 /* Each entry in the listpack is either a string or an integer. */
+// 这个listpackEntry只是用来返回listpack查询元素结果的，listpack保存数据可不是使用这个结构体
+// 如果用这个结构体保存元素，那内存浪费就大发了
 typedef struct {
     /* When string is used, it is provided with the length (slen). */
     unsigned char *sval;
