@@ -2220,11 +2220,13 @@ typedef struct {
 typedef union _iterset iterset;
 typedef union _iterzset iterzset;
 
+// 这里zui的意思应该是zset union iterator，因为这个iterator整合了set,zset两个结构
 void zuiInitIterator(zsetopsrc *op) {
     if (op->subject == NULL)
         return;
 
     if (op->type == OBJ_SET) {
+        // ZZJ TODO 如果迭代期间底层编码变了怎么办，其他数据类型的迭代器也是一样，有空研究下
         iterset *it = &op->iter.set;
         if (op->encoding == OBJ_ENCODING_INTSET) {
             it->is.is = op->subject->ptr;
@@ -2545,6 +2547,7 @@ static size_t zsetDictGetMaxElementLength(dict *d, size_t *totallen) {
     return maxelelen;
 }
 
+// 集合取差集，src代表要比较的set集合，setnum是set的数量，结果放到dstzset
 static void zdiffAlgorithm1(zsetopsrc *src, long setnum, zset *dstzset, size_t *maxelelen, size_t *totelelen) {
     /* DIFF Algorithm 1:
      *
@@ -2567,6 +2570,7 @@ static void zdiffAlgorithm1(zsetopsrc *src, long setnum, zset *dstzset, size_t *
     /* With algorithm 1 it is better to order the sets to subtract
      * by decreasing size, so that we are more likely to find
      * duplicated elements ASAP. */
+    // 把(*src)[1...end]按照size从大到小排序
     qsort(src+1,setnum-1,sizeof(zsetopsrc),zuiCompareByRevCardinality);
 
     memset(&zval, 0, sizeof(zval));
@@ -2727,6 +2731,8 @@ dictType setAccumulatorDictType = {
  * 'cardinality_only' is currently only applicable when 'op' is SET_OP_INTER.
  * Work for SINTERCARD, only return the cardinality with minimum processing and memory overheads.
  */
+// ZUNIION 2 key1 key2， ZUNIONSTORE dstkey 2 key1 key2
+// numkeysIndex代表的是[2]这个数的位置
 void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, int op,
                                    int cardinality_only) {
     int i, j;
@@ -2874,17 +2880,20 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
                      * iterating, so explicitly check for equal object. */
                     if (src[j].subject == src[0].subject) {
                         value = zval.score*src[j].weight;
+                        // 取交集的时候，这里是要根据aggregate的类型，把score求和还是取最大最小值
                         zunionInterAggregate(&score,value,aggregate);
                     } else if (zuiFind(&src[j],&zval,&value)) {
                         value *= src[j].weight;
                         zunionInterAggregate(&score,value,aggregate);
                     } else {
+                        // 当前这个value在src[j]这个set中不存在，那取交集可能没有这个value，直接break
                         break;
                     }
                 }
 
                 /* Only continue when present in every input. */
                 if (j == setnum && cardinality_only) {
+                    // cardinality记录交集的元素个数
                     cardinality++;
 
                     /* We stop the searching after reaching the limit. */
@@ -2917,6 +2926,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
 
         /* Step 1: Create a dictionary of elements -> aggregated-scores
          * by iterating one sorted set after the other. */
+        // 遍历每一个set，放到accumulator中
         for (i = 0; i < setnum; i++) {
             if (zuiLength(&src[i]) == 0) continue;
 
@@ -2946,6 +2956,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
                      * Here we access directly the dictEntry double
                      * value inside the union as it is a big speedup
                      * compared to using the getDouble/setDouble API. */
+                    // key已经存在了，直接修改double value值
                     double *existing_score_ptr = dictGetDoubleValPtr(existing);
                     zunionInterAggregate(existing_score_ptr, score, aggregate);
                 }
@@ -2995,6 +3006,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
         }
         decrRefCount(dstobj);
     } else if (cardinality_only) {
+        // 从前面代码看，这个是只返回交集后的元素个数，也确实只有交集会用到，因为只有交集有ZINTERCARD命令
         addReplyLongLong(c, cardinality);
     } else {
         unsigned long length = dstzset->zsl->length;
@@ -3009,6 +3021,7 @@ void zunionInterDiffGenericCommand(client *c, robj *dstkey, int numkeysIndex, in
             addReplyArrayLen(c, length);
 
         while (zn != NULL) {
+            // 把集合的ele和score返回回去
             if (withscores && c->resp > 2) addReplyArrayLen(c,2);
             addReplyBulkCBuffer(c,zn->ele,sdslen(zn->ele));
             if (withscores) addReplyDouble(c,zn->score);

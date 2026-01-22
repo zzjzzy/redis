@@ -2023,6 +2023,7 @@ struct redisServer {
     int lazyfree_lazy_eviction;
     int lazyfree_lazy_expire;
     // t_set.c中的用法：server.lazyfree_lazy_server_del ? shared.unlink : shared.del;
+    // t_zset.c中也有用到，只有一个地方用到了
     int lazyfree_lazy_server_del;
     int lazyfree_lazy_user_del;
     int lazyfree_lazy_user_flush;

@@ -36,7 +36,7 @@ t_hash(1175行) 已看完
 t_list(1388行) 已看完
 t_set(1680行)  已看完
 t_string(1009行) 已看完
-t_zset(4461行) 正在看 看到zremCommand
+t_zset(4461行) 正在看 看到zrangeResultBeginClient
 t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 
@@ -49,7 +49,9 @@ server.c typedef struct RedisModuleType
 db.c(2560行)
 networking.c(4589行)
 connection.c(h)
+notify.c
 rax(STREAM 的核心)
+zmalloc.c
 
 ===== 废弃 =====
 zipmap.c 不用学
