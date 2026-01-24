@@ -195,7 +195,9 @@ long long ustime(void) {
     long long ust;
 
     gettimeofday(&tv, NULL);
+    // 秒*10000000就是微妙
     ust = ((long long)tv.tv_sec)*1000000;
+    // 再加上微妙部分
     ust += tv.tv_usec;
     return ust;
 }

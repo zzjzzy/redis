@@ -71,6 +71,8 @@ static struct evictionPoolEntry *EvictionPoolLRU;
  * object->lru field of redisObject structures. */
 // 已看
 unsigned int getLRUClock(void) {
+    // (mstime()/LRU_CLOCK_RESOLUTION)毫秒/1000，就是获取秒数，LRU_CLOCK_MAX是24个1
+    // 也就是说，这里最多只会保留24位，一个1769218898的秒数用二进制表示是1101001-01110100-00100011-01010010（31位）
     return (mstime()/LRU_CLOCK_RESOLUTION) & LRU_CLOCK_MAX;
 }
 
@@ -81,6 +83,8 @@ unsigned int getLRUClock(void) {
 // 已看
 unsigned int LRU_CLOCK(void) {
     unsigned int lruclock;
+    // LRU_CLOCK_RESOLUTION=1000，server.hz>=1就满足这个if条件
+    // ZZJ TODO 这里的server.hz怎么赋值的待研究
     if (1000/server.hz <= LRU_CLOCK_RESOLUTION) {
         // 使用提前获取的lruclock，这样就不用进行系统调用获取时间了
         lruclock = server.lruclock;
@@ -92,11 +96,14 @@ unsigned int LRU_CLOCK(void) {
 
 /* Given an object returns the min number of milliseconds the object was never
  * requested, using an approximated LRU algorithm. */
+// 已看，计算obj的ide时间，o.lru记录了对象最近访问时间，用系统时间-o.lru就是o的idle时间
 unsigned long long estimateObjectIdleTime(robj *o) {
     unsigned long long lruclock = LRU_CLOCK();
     if (lruclock >= o->lru) {
         return (lruclock - o->lru) * LRU_CLOCK_RESOLUTION;
     } else {
+        // ZZJ TODO 目前理解(不确定对不对，主要是不知道为什么o.lru大于lrulock就是用的lfu, lfu是怎么确保一定大于lrulock的)：
+        // 如果o.lru大于lrulock，说明用的是lfu，由于lfr越大，LRU_CLOCK_MAX - o->lru就越小，就代表idleTime越小，就越不应该被淘汰
         return (lruclock + (LRU_CLOCK_MAX - o->lru)) *
                     LRU_CLOCK_RESOLUTION;
     }
@@ -283,7 +290,7 @@ void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evic
 /* Return the current time in minutes, just taking the least significant
  * 16 bits. The returned time is suitable to be stored as LDT (last decrement
  * time) for the LFU implementation. */
-// 已看
+// 已看 65535是16个1，也就是取分钟时间戳的16位。举例：1769221451÷60=29487024(1-11000001-11101111-10110000(25位))
 unsigned long LFUGetTimeInMinutes(void) {
     return (server.unixtime/60) & 65535;
 }

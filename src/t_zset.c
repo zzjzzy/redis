@@ -636,6 +636,7 @@ unsigned long zslGetRank(zskiplist *zsl, double score, sds ele) {
     int i;
 
     x = zsl->header;
+    // 这个方法可以看出来skiplist根据score查找元素的过程
     for (i = zsl->level-1; i >= 0; i--) {
         while (x->level[i].forward &&
             (x->level[i].forward->score < score ||
@@ -2032,9 +2033,9 @@ void zremCommand(client *c) {
 
 typedef enum {
     ZRANGE_AUTO = 0,
-    ZRANGE_RANK,
-    ZRANGE_SCORE,
-    ZRANGE_LEX,
+    ZRANGE_RANK, // 根据索引取范围
+    ZRANGE_SCORE, // score范围
+    ZRANGE_LEX, // 字典项范围
 } zrange_type;
 
 /* Implements ZREMRANGEBYRANK, ZREMRANGEBYSCORE, ZREMRANGEBYLEX commands. */
@@ -3255,6 +3256,7 @@ static void zrangeResultHandlerDestinationKeySet (zrange_result_handler *handler
 }
 
 /* This command implements ZRANGE, ZREVRANGE. */
+// 注意和后面的zrangeGenericCommand区分
 void genericZrangebyrankCommand(zrange_result_handler *handler,
     robj *zobj, long start, long end, int withscores, int reverse) {
 
@@ -3330,6 +3332,7 @@ void genericZrangebyrankCommand(zrange_result_handler *handler,
         } else {
             ln = zsl->header->level[0].forward;
             if (start > 0)
+                // 注意这里start索引从0开始，zslGetElementByRank定义的rank从1开始
                 ln = zslGetElementByRank(zsl,start+1);
         }
 
@@ -3463,6 +3466,7 @@ void genericZrangebyscoreCommand(zrange_result_handler *handler,
             if (reverse) {
                 if (!zslValueGteMin(ln->score,range)) break;
             } else {
+                // 如果第一个元素的值比最大值还大（不小于等于max），说明没有合适的元素，直接退出
                 if (!zslValueLteMax(ln->score,range)) break;
             }
 
@@ -3497,6 +3501,7 @@ void zrevrangebyscoreCommand(client *c) {
     zrangeGenericCommand(&handler, 1, 0, ZRANGE_SCORE, ZRANGE_DIRECTION_REVERSE);
 }
 
+// 计算两个score间的元素数量
 void zcountCommand(client *c) {
     robj *key = c->argv[1];
     robj *zobj;
@@ -3788,6 +3793,9 @@ void zrevrangebylexCommand(client *c) {
  * The argc_start points to the src key argument, so following syntax is like:
  * <src> <min> <max> [BYSCORE | BYLEX] [REV] [WITHSCORES] [LIMIT offset count]
  */
+// ZRANGE是根据索引取，ZRANGEBYSCORE是根据分数取
+// 试了下zrangebylex zs [a [b命令，如果b比较靠后，即使zset中存在b也不会返回，zset还是按照分数排序存储的
+// 比如存储的是 1 a, 2 c, 3 d, 4 b，从a开始查询，查到c发现已经超过[a,b]的返回的，就不会向下查询了，所以只会返回a
 void zrangeGenericCommand(zrange_result_handler *handler, int argc_start, int store,
                           zrange_type rangetype, zrange_direction direction)
 {
@@ -3979,6 +3987,7 @@ void zmscoreCommand(client *c) {
     }
 }
 
+// 获取指定元素的所以 zrank key ele
 void zrankGenericCommand(client *c, int reverse) {
     robj *key = c->argv[1];
     robj *ele = c->argv[2];
@@ -4000,6 +4009,7 @@ void zrankGenericCommand(client *c, int reverse) {
             return;
         }
     }
+    // ZZJ TODO 看下shared.nullarray的作用
     reply = opt_withscore ? shared.nullarray[c->resp] : shared.null[c->resp];
     if ((zobj = lookupKeyReadOrReply(c, key, reply)) == NULL || checkType(c, zobj, OBJ_ZSET)) {
         return;
@@ -4035,9 +4045,11 @@ void zscanCommand(client *c) {
     robj *o;
     unsigned long cursor;
 
+    // ZZJ TODO parseScanCursorOrReply在db.c中，还没看
     if (parseScanCursorOrReply(c,c->argv[2],&cursor) == C_ERR) return;
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
         checkType(c,o,OBJ_ZSET)) return;
+    // ZZJ TODO scanGenericCommand在db.c中，还没看
     scanGenericCommand(c,o,cursor);
 }
 
@@ -4074,6 +4086,7 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
 
     /* Check type and break on the first error, otherwise identify candidate. */
     idx = 0;
+    // 这里是找到第一个不为空的set进行pop，所以只会pop一个key中的元素
     while (idx < keyc) {
         key = keyv[idx++];
         zobj = lookupKeyWrite(c->db,key);
@@ -4162,6 +4175,7 @@ void genericZpopCommand(client *c, robj **keyv, int keyc, int where, int emitkey
             serverPanic("Unknown sorted set encoding");
         }
 
+        // 注意这儿有调用zsetDel，所以下次循环再继续取头或尾的元素就行了
         serverAssertWithInfo(c,zobj,zsetDel(zobj,ele));
         server.dirty++;
 
@@ -4209,6 +4223,7 @@ void zpopMinMaxCommand(client *c, int where) {
     if (c->argc == 3 && getPositiveLongFromObjectOrReply(c, c->argv[2], &count, NULL) != C_OK)
         return;
 
+    // ZZJ TODO RESP2和RESP3啥意思？
     /* Respond with a single (flat) array in RESP2 or if count is -1
      * (returning a single element). In RESP3, when count > 0 use nested array. */
     int use_nested_array = (c->resp > 2 && count != -1);
@@ -4239,6 +4254,7 @@ void zpopmaxCommand(client *c) {
  * 'use_nested_array' when false it generates a flat array (with or without key name).
  * When true, it generates a nested 3 level array of keyname, field + score pairs.
  * */
+// 这里的block是指key不存在时block，知道key被设置了，如果key本来就存在，会马上返回
 void blockingGenericZpopCommand(client *c, robj **keys, int numkeys, int where,
                                 int timeout_idx, long count, int use_nested_array, int reply_nil_when_empty) {
     robj *o;
@@ -4329,6 +4345,7 @@ static void zrandmemberReplyWithListpack(client *c, unsigned int count, listpack
  * the number of randoms per time. */
 #define ZRANDMEMBER_RANDOM_SAMPLE_LIMIT 1000
 
+// l是负数表示放回的随机取，也就是允许取到重复元素
 void zrandmemberWithCountCommand(client *c, long l, int withscores) {
     unsigned long count, size;
     int uniq = 1;

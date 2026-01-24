@@ -36,7 +36,7 @@ t_hash(1175行) 已看完
 t_list(1388行) 已看完
 t_set(1680行)  已看完
 t_string(1009行) 已看完
-t_zset(4461行) 正在看 看到zrangeResultBeginClient
+t_zset(4461行) 已看完（不容易啊！）
 t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 
@@ -44,12 +44,14 @@ t_stream(4051行)
 object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
-server.c zset
 server.c typedef struct RedisModuleType
 db.c(2560行)
+evict.c(770行) 正在看
 networking.c(4589行)
 connection.c(h)
 notify.c
+timeout.c
+blocked.c
 rax(STREAM 的核心)
 zmalloc.c
 
@@ -66,6 +68,7 @@ zipmap.c 不用学
 
 
 ## TODO 
+### 看下reply = opt_withscore ? shared.nullarray[c->resp] : shared.null[c->resp];这种的作用
 ### 有空再总结下各个基础数据结构的实现：结构、数据怎么编码的、怎么存储的
 ### sds的这个特性【an SDS string is always an odd pointer 】再深入研究下，用在dict中有什么优势？
 ### 看下代码里的ZZJ TODO

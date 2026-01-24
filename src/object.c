@@ -58,6 +58,7 @@ void initObjectLRUOrLFU(robj *o) {
      * alternatively the LFU counter. */
     // 如果是用的LFU策略，就按照LFU赋值
     if (server.maxmemory_policy & MAXMEMORY_FLAG_LFU) {
+        // 前16位是时间戳，后8位是访问次数
         o->lru = (LFUGetTimeInMinutes() << 8) | LFU_INIT_VAL;
     } else {
         o->lru = LRU_CLOCK();
