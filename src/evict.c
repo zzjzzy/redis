@@ -60,6 +60,7 @@ struct evictionPoolEntry {
     int dbid;                   /* Key DB number. */
 };
 
+// 从evictionPoolAlloc方法可以知道，这里的EvictionPoolLRU是个数组（长度EVPOOL_SIZE 16）
 static struct evictionPoolEntry *EvictionPoolLRU;
 
 /* ----------------------------------------------------------------------------
@@ -128,6 +129,7 @@ unsigned long long estimateObjectIdleTime(robj *o) {
  * we populate it again. This time we'll be sure that the pool has at least
  * one key that can be evicted, if there is at least one key that can be
  * evicted in the whole database. */
+// ZZJ TODO 上面这段没太看懂，回头再看
 
 /* Create a new eviction pool. */
 void evictionPoolAlloc(void) {
@@ -152,7 +154,8 @@ void evictionPoolAlloc(void) {
  * We insert keys on place in ascending order, so keys with the smaller
  * idle time are on the left, and keys with the higher idle time on the
  * right. */
-
+// 已看，有些细节没理明白，不过不重要，知道这个方法是从sampledict随机取maxmemory_samples个元素，
+// 然后和pool中的idle比较，判断是否需要放到pool中进行剔除
 void evictionPoolPopulate(int dbid, dict *sampledict, dict *keydict, struct evictionPoolEntry *pool) {
     int j, k, count;
     dictEntry *samples[server.maxmemory_samples];
@@ -299,14 +302,17 @@ unsigned long LFUGetTimeInMinutes(void) {
  * that elapsed since the last access. Handle overflow (ldt greater than
  * the current 16 bits minutes time) considering the time as wrapping
  * exactly once. */
+// 已看 ldt last decrement time
 unsigned long LFUTimeElapsed(unsigned long ldt) {
     unsigned long now = LFUGetTimeInMinutes();
     if (now >= ldt) return now-ldt;
+    // ZZJ TODO 这一行没看明白，后面再看，主要看这个方法怎么用的，ldt怎么传的
     return 65535-ldt+now;
 }
 
 /* Logarithmically increment a counter. The greater is the current counter value
  * the less likely is that it gets really incremented. Saturate it at 255. */
+// 已看，对conter进行++，ZZJ TODO 先理解到这个程度，里面有些细节还不明白
 uint8_t LFULogIncr(uint8_t counter) {
     if (counter == 255) return 255;
     double r = (double)rand()/RAND_MAX;
@@ -327,9 +333,11 @@ uint8_t LFULogIncr(uint8_t counter) {
  * This function is used in order to scan the dataset for the best object
  * to fit: as we check for the candidate, we incrementally decrement the
  * counter of the scanned objects if needed. */
+// 已看，返回o的LFU counter
 unsigned long LFUDecrAndReturn(robj *o) {
     unsigned long ldt = o->lru >> 8;
     unsigned long counter = o->lru & 255;
+    // 用时间和访问频次综合进行LFU判断，因为一个访问频次很高的，可能近期都没被访问
     unsigned long num_periods = server.lfu_decay_time ? LFUTimeElapsed(ldt) / server.lfu_decay_time : 0;
     if (num_periods)
         counter = (num_periods > counter) ? 0 : counter - num_periods;
@@ -344,7 +352,7 @@ unsigned long LFUDecrAndReturn(robj *o) {
  * massive eviction loop, even all keys are evicted.
  *
  * This function returns the sum of AOF and replication buffer. */
-// 还没看
+// 已看，从后面的使用可以知道，这个方法返回的是slaves output buffer和aop buffer的大小
 size_t freeMemoryGetNotCountedMemory(void) {
     size_t overhead = 0;
 
@@ -363,6 +371,7 @@ size_t freeMemoryGetNotCountedMemory(void) {
      * loop, we don't count the delayed freed replication backlog into used
      * memory even if there are no replicas, i.e. we still regard this memory
      * as replicas'. */
+    // ZZJ TODO 这里还没看明白，等看到slave相关的应该就明白了
     if ((long long)server.repl_buffer_mem > server.repl_backlog_size) {
         /* We use list structure to manage replication buffer blocks, so backlog
          * also occupies some extra memory, we can't know exact blocks numbers,
@@ -377,6 +386,7 @@ size_t freeMemoryGetNotCountedMemory(void) {
     }
 
     if (server.aof_state != AOF_OFF) {
+        // 这里是获取aop占用的内存大小
         overhead += sdsAllocSize(server.aof_buf);
     }
     return overhead;
@@ -406,6 +416,7 @@ size_t freeMemoryGetNotCountedMemory(void) {
  *              limit.
  *              (Populated both for C_ERR and C_OK)
  */
+// 已看
 int getMaxmemoryState(size_t *total, size_t *logical, size_t *tofree, float *level) {
     size_t mem_reported, mem_used, mem_tofree;
 
@@ -424,7 +435,9 @@ int getMaxmemoryState(size_t *total, size_t *logical, size_t *tofree, float *lev
     /* Remove the size of slaves output buffers and AOF buffer from the
      * count of used memory. */
     mem_used = mem_reported;
+    // overhead代表slaves output buffers 和 aop buffer的大小
     size_t overhead = freeMemoryGetNotCountedMemory();
+    // 如果mem_used大于overhead，说明有用户数据，否则可能是没有任何用户数据，mem_used就赋值为0
     mem_used = (mem_used > overhead) ? mem_used-overhead : 0;
 
     /* Compute the ratio of memory usage. */
@@ -501,6 +514,7 @@ static int isSafeToPerformEvictions(void) {
     if (server.masterhost && server.repl_slave_ignore_maxmemory) return 0;
 
     /* If 'evict' action is paused, for whatever reason, then return false */
+    // ZZJ TODO 这个还没看
     if (isPausedActionsWithUpdate(PAUSE_ACTION_EVICT)) return 0;
 
     return 1;

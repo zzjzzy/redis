@@ -46,7 +46,7 @@ server.c dict(从【Hash table type implementation】到【int allPersistenceDis
 server.h struct client 已看完，后面有用到啥字段再看就行
 server.c typedef struct RedisModuleType
 db.c(2560行)
-evict.c(770行) 正在看
+evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
 networking.c(4589行)
 connection.c(h)
 notify.c
@@ -54,6 +54,7 @@ timeout.c
 blocked.c
 rax(STREAM 的核心)
 zmalloc.c
+ae.c(事件驱动)
 
 ===== 废弃 =====
 zipmap.c 不用学

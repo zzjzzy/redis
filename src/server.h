@@ -1924,6 +1924,7 @@ struct redisServer {
     unsigned long long maxmemory;   /* Max number of memory bytes to use */
     ssize_t maxmemory_clients;       /* Memory limit for total client buffers */
     int maxmemory_policy;           /* Policy for key eviction */
+    // 达到内存限制时，evict元素时的取样数量
     int maxmemory_samples;          /* Precision of random sampling */
     int maxmemory_eviction_tenacity;/* Aggressiveness of eviction processing */
     int lfu_log_factor;             /* LFU logarithmic counter factor. */
