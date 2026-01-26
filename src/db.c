@@ -52,6 +52,7 @@ static void dbSetValue(redisDb *db, robj *key, robj *val, int overwrite, dictEnt
 /* Update LFU when an object is accessed.
  * Firstly, decrement the counter if the decrement time is reached.
  * Then logarithmically increment the counter, and update the access time. */
+// 已看，LFUDecrAndReturn和LFULogIncr这两个方法没有详细研究
 void updateLFU(robj *val) {
     unsigned long counter = LFUDecrAndReturn(val);
     counter = LFULogIncr(counter);
@@ -85,6 +86,7 @@ void updateLFU(robj *val) {
  * Even if the key expiry is master-driven, we can correctly report a key is
  * expired on replicas even if the master is lagging expiring our key via DELs
  * in the replication link. */
+// 已看
 robj *lookupKey(redisDb *db, robj *key, int flags) {
     dictEntry *de = dictFind(db->dict,key->ptr);
     robj *val = NULL;
@@ -192,18 +194,28 @@ robj *lookupKeyWriteOrReply(client *c, robj *key, robj *reply) {
  *
  * If the update_if_existing argument is false, the the program is aborted
  * if the key already exists, otherwise, it can fall back to dbOverwite. */
+// ZZJ PRV2，注释多了个the
 static void dbAddInternal(redisDb *db, robj *key, robj *val, int update_if_existing) {
     dictEntry *existing;
+    // dictAddRaw: 如果key已经存在，de是NULL，existing被设置为已存在的dictEntry
     dictEntry *de = dictAddRaw(db->dict, key->ptr, &existing);
     if (update_if_existing && existing) {
         dbSetValue(db, key, val, 1, existing);
         return;
     }
+    // 如果之前key存在，则de=null，但是update_if_existing=0，上面的if走不到，就会执行这个serverAssertWithInfo
+    // 也就是如果key存在，但是我又指定了不能覆盖val，这种情况这个serverAssertWithInfo就拦截返回异常了
+    // ZZJ TODO 这里其实不太明白，为什么不能覆盖key，就要返回异常？
     serverAssertWithInfo(NULL, key, de != NULL);
+    // serverAssertWithInfo判断了de!=NULL，所以走到这里说明de不是NULL，根据dictAddRaw的定义，说明之前key是不存在的
+    // ZZJ TODO 这里key为什么要重新set下？没明白
     dictSetKey(db->dict, de, sdsdup(key->ptr));
     initObjectLRUOrLFU(val);
+    // 走到这里说明key之前不存在，需要对新建的de设置下val
     dictSetVal(db->dict, de, val);
+    // ZZJ TODO signalKeyAsReady还没看
     signalKeyAsReady(db, key, val->type);
+    // ZZJ TODO slotToKeyAddEntry还没看
     if (server.cluster_enabled) slotToKeyAddEntry(de, db);
     notifyKeyspaceEvent(NOTIFY_NEW,"new",key,db->id);
 }
@@ -244,6 +256,7 @@ int dbAddRDBLoad(redisDb *db, sds key, robj *val) {
  * The dictEntry input is optional, can be used if we already have one.
  *
  * The program is aborted if the key was not already present. */
+// 主要这个方法就是覆盖已有的val，overwrite不是控制是否覆盖的，是控制啥的现在没太看明白
 static void dbSetValue(redisDb *db, robj *key, robj *val, int overwrite, dictEntry *de) {
     if (!de) de = dictFind(db->dict,key->ptr);
     serverAssertWithInfo(NULL,key,de != NULL);
@@ -252,6 +265,7 @@ static void dbSetValue(redisDb *db, robj *key, robj *val, int overwrite, dictEnt
     val->lru = old->lru;
 
     if (overwrite) {
+        // ZZJ TODO 这里面的逻辑没太看懂，有空再研究
         /* RM_StringDMA may call dbUnshareStringValue which may free val, so we
          * need to incr to retain old */
         incrRefCount(old);
@@ -268,6 +282,7 @@ static void dbSetValue(redisDb *db, robj *key, robj *val, int overwrite, dictEnt
     dictSetVal(db->dict, de, val);
 
     if (server.lazyfree_lazy_server_del) {
+        // ZZJ TODO freeObjAsync还没看
         freeObjAsync(key,old,db->id);
     } else {
         /* This is just decrRefCount(old); */
@@ -325,6 +340,7 @@ robj *dbRandomKey(redisDb *db) {
     int maxtries = 100;
     int allvolatile = dictSize(db->dict) == dictSize(db->expires);
 
+    // ZZJ redis中也会使用“死循环”
     while(1) {
         sds key;
         robj *keyobj;
@@ -336,6 +352,7 @@ robj *dbRandomKey(redisDb *db) {
         keyobj = createStringObject(key,sdslen(key));
         if (dictFind(db->expires,key)) {
             if (allvolatile && (server.masterhost || isPausedActions(PAUSE_ACTION_EXPIRE)) && --maxtries == 0) {
+                // ZZJ TODO 这一段没看懂
                 /* If the DB is composed only of keys with an expire set,
                  * it could happen that all the keys are already logically
                  * expired in the slave, so the function cannot stop because
@@ -361,6 +378,7 @@ int dbGenericDelete(redisDb *db, robj *key, int async, int flags) {
     int table;
     dictEntry *de = dictTwoPhaseUnlinkFind(db->dict,key->ptr,&plink,&table);
     if (de) {
+        // ZZJ TODO moduleNotifyKeyUnlink、signalDeletedKeyAsReady、freeObjAsync、slotToKeyDelEntry还没看
         robj *val = dictGetVal(de);
         /* RM_StringDMA may call dbUnshareStringValue which may free val, so we
          * need to incr to retain val */
@@ -523,10 +541,12 @@ long long emptyData(int dbnum, int flags, void(callback)(dict*)) {
      * in cluster mode. */
     if (server.cluster_enabled) slotToKeyFlush(server.db);
 
+    // ZZJ TODO flushSlaveKeysWithExpireList还没看
     if (dbnum == -1) flushSlaveKeysWithExpireList();
 
     if (with_functions) {
         serverAssert(dbnum == -1);
+        // ZZJ TODO functionsLibCtxClearCurrent还没看
         functionsLibCtxClearCurrent(async);
     }
 
