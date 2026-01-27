@@ -45,7 +45,7 @@ object.c 【Memory introspection】以上都看完了，其他部分等用到了
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
 server.c typedef struct RedisModuleType
-db.c(2560行) 正在看，看到initTempDb（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
+db.c(2560行) 正在看，看到scanGenericCommand（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
 networking.c(4589行)
 expire.c
@@ -57,6 +57,8 @@ rax(STREAM 的核心)
 zmalloc.c
 ae.c(事件驱动)
 cluster.c
+multi.c
+rdb.c
 
 ===== 废弃 =====
 zipmap.c 不用学
@@ -71,6 +73,7 @@ zipmap.c 不用学
 
 
 ## TODO 
+### util.c stringmatchlen_impl这个可能是简单的正则匹配实现，有空研究下
 ### 看下reply = opt_withscore ? shared.nullarray[c->resp] : shared.null[c->resp];这种的作用
 ### 有空再总结下各个基础数据结构的实现：结构、数据怎么编码的、怎么存储的
 ### sds的这个特性【an SDS string is always an odd pointer 】再深入研究下，用在dict中有什么优势？

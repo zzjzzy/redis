@@ -256,7 +256,7 @@ int dbAddRDBLoad(redisDb *db, sds key, robj *val) {
  * The dictEntry input is optional, can be used if we already have one.
  *
  * The program is aborted if the key was not already present. */
-// 主要这个方法就是覆盖已有的val，overwrite不是控制是否覆盖的，是控制啥的现在没太看明白
+// 注意这个方法就是覆盖已有的val，overwrite不是控制是否覆盖的，是控制啥的现在没太看明白
 static void dbSetValue(redisDb *db, robj *key, robj *val, int overwrite, dictEntry *de) {
     if (!de) de = dictFind(db->dict,key->ptr);
     serverAssertWithInfo(NULL,key,de != NULL);
@@ -512,6 +512,7 @@ long long emptyDbStructure(redisDb *dbarray, int dbnum, int async,
  * On success the function returns the number of keys removed from the
  * database(s). Otherwise -1 is returned in the specific case the
  * DB number is out of range, and errno is set to EINVAL. */
+// ZZJ TODO 已看，这个里面有些module, signal相关的还没细看，有空再看一遍
 long long emptyData(int dbnum, int flags, void(callback)(dict*)) {
     int async = (flags & EMPTYDB_ASYNC);
     int with_functions = !(flags & EMPTYDB_NOFUNCTIONS);
@@ -622,6 +623,7 @@ long long dbTotalServerKeyCount(void) {
 
 /* Note that the 'c' argument may be NULL if the key was modified out of
  * a context of a client. */
+// ZZJ TODO 这里面调用的两个方法分别在multi.c和tracking.c，都还没看
 void signalModifiedKey(client *c, redisDb *db, robj *key) {
     touchWatchedKey(db,key);
     trackingInvalidateKey(c,key,1);
@@ -638,6 +640,7 @@ void signalFlushedDb(int dbid, int async) {
 
     for (int j = startdb; j <= enddb; j++) {
         scanDatabaseForDeletedKeys(&server.db[j], NULL);
+        // ZZJ TODO 还没看
         touchAllWatchedKeysInDb(&server.db[j], NULL);
     }
 
@@ -677,6 +680,7 @@ int getFlushCommandFlags(client *c, int *flags) {
 }
 
 /* Flushes the whole server data set. */
+// ZZJ TODO 都是rdb的操作，后面看rdb.c
 void flushAllDataAndResetRDB(int flags) {
     server.dirty += emptyData(-1,flags,NULL);
     if (server.child_type == CHILD_TYPE_RDB) killRDBChild();
@@ -908,6 +912,7 @@ void scanCallback(void *privdata, const dictEntry *de) {
  * if the cursor is valid, store it as unsigned integer into *cursor and
  * returns C_OK. Otherwise return C_ERR and send an error to the
  * client. */
+// 已看，o.ptr中存的是一个数字型的字符串，就是把这个字符串转成ulong，存到cursor变量中
 int parseScanCursorOrReply(client *c, robj *o, unsigned long *cursor) {
     char *eptr;
 

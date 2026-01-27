@@ -53,6 +53,7 @@
 #define UNUSED(x) ((void)(x))
 
 /* Glob-style pattern matching. */
+// ZZJ TODO 这个是正则匹配？有空研究下
 static int stringmatchlen_impl(const char *pattern, int patternLen,
         const char *string, int stringLen, int nocase, int *skipLongerMatches, int nesting)
 {
