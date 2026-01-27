@@ -4269,6 +4269,7 @@ void closeListeningSockets(int unlink_unix_socket) {
  * errors are logged but ignored and C_OK is returned.
  *
  * On success, this function returns C_OK and then it's OK to call exit(0). */
+// db.c中调用，还没看
 int prepareForShutdown(int flags) {
     if (isShutdownInitiated()) return C_ERR;
 
@@ -4335,6 +4336,7 @@ static void cancelShutdown(void) {
 }
 
 /* Returns C_OK if shutdown was aborted and C_ERR if shutdown wasn't ongoing. */
+// 在db.c中调用的，还没看
 int abortShutdown(void) {
     if (isShutdownInitiated()) {
         cancelShutdown();

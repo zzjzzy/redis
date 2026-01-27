@@ -1024,6 +1024,7 @@ void scanGenericCommand(client *c, robj *o, unsigned long cursor) {
             i += 2;
         } else if (!strcasecmp(c->argv[i]->ptr, "type") && o == NULL && j >= 2) {
             /* SCAN for a particular type only applies to the db dict */
+            // 如果scan是整个db，type参数指定需要扫描的key类型，因为db中有各种类型的key
             typename = c->argv[i+1]->ptr;
             type = getObjectTypeByName(typename);
             if (type == LLONG_MAX) {
@@ -1246,6 +1247,7 @@ void shutdownCommand(client *c) {
         return;
     }
 
+    // ZZJ TODO 这里涉及到很多server.c的内容，后面再回来看一遍
     if (!(flags & SHUTDOWN_NOSAVE) && isInsideYieldingLongCommand()) {
         /* Script timed out. Shutdown allowed only with the NOSAVE flag. See
          * also processCommand where these errors are returned. */

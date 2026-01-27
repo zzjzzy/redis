@@ -1302,6 +1302,7 @@ unsigned long dictScan(dict *d,
  * can reallocate. The callbacks should return a new memory address or NULL,
  * where NULL means that no reallocation happened and the old memory is still
  * valid. */
+// ZZJ TODO 这个有空再看下，看下cursor怎么用的
 unsigned long dictScanDefrag(dict *d,
                              unsigned long v,
                              dictScanFunction *fn,

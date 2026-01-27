@@ -26,7 +26,7 @@ sds.c 看完了
 ===== set or list =====
 intset.c（set小对象用） 看完了
 skiplist(zset的底层实现(大对象)) 不用看（在t_zset中实现的，直接看t_zset）
-adlist.c（被listpack替代） 看完了
+adlist.c（被listpack替代） 看完了（scanGenericCommand用的adlist装的scan结果）
 listpack（替代ziplist） 看完了
 ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
 quicklist(adlist+listpack的混合,list的唯一实现) 看完了
