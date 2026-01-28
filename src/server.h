@@ -1796,6 +1796,7 @@ struct redisServer {
                                         default no. (for testings). */
 
     /* RDB persistence */
+    // ZZJ TODO 看下这个dirty怎么用的，只看到各种地方在++
     long long dirty;                /* Changes to DB from the last save */
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
     long long rdb_last_load_keys_expired;  /* number of expired keys when loading RDB */

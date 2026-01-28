@@ -1300,6 +1300,7 @@ void renameGenericCommand(client *c, int nx) {
     }
     dbAdd(c->db,c->argv[2],o);
     if (expire != -1) setExpire(c,c->db,c->argv[2],expire);
+    // 因为前面incrRefCount(o)了，所以这里dbDelete，value不会被清除
     dbDelete(c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[1]);
     signalModifiedKey(c,c->db,c->argv[2]);
@@ -1319,6 +1320,7 @@ void renamenxCommand(client *c) {
     renameGenericCommand(c,1);
 }
 
+// move key db
 void moveCommand(client *c) {
     robj *o;
     redisDb *src, *dst;
@@ -1381,6 +1383,7 @@ void moveCommand(client *c) {
     addReply(c,shared.cone);
 }
 
+// copy key newkey [replace] [db 1]
 void copyCommand(client *c) {
     robj *o;
     redisDb *src, *dst;
@@ -1489,6 +1492,7 @@ void copyCommand(client *c) {
  * where the function is used for more info. */
 void scanDatabaseForReadyKeys(redisDb *db) {
     dictEntry *de;
+    // ZZJ TODO blocking_keys是怎么用的，怎么添加的，key有值后怎么通知的
     dictIterator *di = dictGetSafeIterator(db->blocking_keys);
     while((de = dictNext(di)) != NULL) {
         robj *key = dictGetKey(de);
@@ -1551,10 +1555,12 @@ int dbSwapDatabases(int id1, int id2) {
 
     /* Swapdb should make transaction fail if there is any
      * client watching keys */
+    // ZZJ TODO 这个还没看
     touchAllWatchedKeysInDb(db1, db2);
     touchAllWatchedKeysInDb(db2, db1);
 
     /* Try to unblock any XREADGROUP clients if the key no longer exists. */
+    // ZZJ TODO 这个没看明白
     scanDatabaseForDeletedKeys(db1, db2);
     scanDatabaseForDeletedKeys(db2, db1);
 
@@ -1580,6 +1586,7 @@ int dbSwapDatabases(int id1, int id2) {
      * in dbAdd() when a list is created. So here we need to rescan
      * the list of clients blocked on lists and signal lists as ready
      * if needed. */
+    // ZZJ TODO 这里没太看明白
     scanDatabaseForReadyKeys(db1);
     scanDatabaseForReadyKeys(db2);
     return C_OK;
