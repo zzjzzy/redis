@@ -1490,6 +1490,7 @@ void copyCommand(client *c) {
  * one or more blocked clients for B[LR]POP or other blocking commands
  * and signal the keys as ready if they are of the right type. See the comment
  * where the function is used for more info. */
+// 已看，就这个方法而言，逻辑明白了
 void scanDatabaseForReadyKeys(redisDb *db) {
     dictEntry *de;
     // ZZJ TODO blocking_keys是怎么用的，怎么添加的，key有值后怎么通知的
@@ -1508,6 +1509,7 @@ void scanDatabaseForReadyKeys(redisDb *db) {
 /* Since we are unblocking XREADGROUP clients in the event the
  * key was deleted/overwritten we must do the same in case the
  * database was flushed/swapped. */
+// 已看，就只看这个方法的逻辑，看明白了，里面调用的其他方法还有待研究
 void scanDatabaseForDeletedKeys(redisDb *emptied, redisDb *replaced_with) {
     dictEntry *de;
     dictIterator *di = dictGetSafeIterator(emptied->blocking_keys);
@@ -1532,6 +1534,7 @@ void scanDatabaseForDeletedKeys(redisDb *emptied, redisDb *replaced_with) {
             }
         }
         /* We want to try to unblock any client using a blocking XREADGROUP */
+        // 如果在原db(emptied)中存在，但是在目标db(replaced_with)中不存在，说明这个key被删除了，需要通知
         if ((existed && !exists) || original_type != curr_type)
             signalDeletedKeyAsReady(emptied, key, original_type);
     }
@@ -1560,7 +1563,6 @@ int dbSwapDatabases(int id1, int id2) {
     touchAllWatchedKeysInDb(db2, db1);
 
     /* Try to unblock any XREADGROUP clients if the key no longer exists. */
-    // ZZJ TODO 这个没看明白
     scanDatabaseForDeletedKeys(db1, db2);
     scanDatabaseForDeletedKeys(db2, db1);
 
@@ -1586,7 +1588,7 @@ int dbSwapDatabases(int id1, int id2) {
      * in dbAdd() when a list is created. So here we need to rescan
      * the list of clients blocked on lists and signal lists as ready
      * if needed. */
-    // ZZJ TODO 这里没太看明白
+    // 因为db被swap了，里面的key变了，所以需要scan所有key通知相关事件
     scanDatabaseForReadyKeys(db1);
     scanDatabaseForReadyKeys(db2);
     return C_OK;
@@ -1609,6 +1611,7 @@ void swapMainDbWithTempDb(redisDb *tempDb) {
 
         /* Swapping databases should make transaction fail if there is any
          * client watching keys. */
+        // ZZJ TODO 这个还没看
         touchAllWatchedKeysInDb(activedb, newdb);
 
         /* Try to unblock any XREADGROUP clients if the key no longer exists. */
@@ -1617,6 +1620,8 @@ void swapMainDbWithTempDb(redisDb *tempDb) {
         /* Swap hash tables. Note that we don't swap blocking_keys,
          * ready_keys and watched_keys, since clients 
          * remain in the same DB they were. */
+        // blocking_keys不需要swap，因为blocking_keys其实记录的是客户端信息，比如clientA连接的是db1，clientB连接的是db2，
+        // 切换后clientA还是连接db1，只是里面的key都换了，但是clientA想要监听的key还是那些，所以db1和db2不能交换blocking_keys
         activedb->dict = newdb->dict;
         activedb->expires = newdb->expires;
         activedb->avg_ttl = newdb->avg_ttl;
@@ -1639,7 +1644,9 @@ void swapMainDbWithTempDb(redisDb *tempDb) {
         scanDatabaseForReadyKeys(activedb);
     }
 
+    // ZZJ TODO 这个还没看
     trackingInvalidateKeysOnFlush(1);
+    // ZZJ TODO 这个还没看
     flushSlaveKeysWithExpireList();
 }
 
@@ -1697,6 +1704,7 @@ void setExpire(client *c, redisDb *db, robj *key, long long when) {
 
     int writable_slave = server.masterhost && server.repl_slave_ro == 0;
     if (c && writable_slave && !(c->flags & CLIENT_MASTER))
+        // ZZJ TODO 这个还没看
         rememberSlaveKeyWithExpire(db,key);
 }
 
@@ -1755,6 +1763,7 @@ void propagateDeletion(redisDb *db, robj *key, int lazy) {
      * Even if module executed a command without asking for propagation. */
     int prev_replication_allowed = server.replication_allowed;
     server.replication_allowed = 1;
+    // ZZJ TODO 这个还没看
     alsoPropagate(db->id,argv,2,PROPAGATE_AOF|PROPAGATE_REPL);
     server.replication_allowed = prev_replication_allowed;
 
@@ -1863,6 +1872,7 @@ int expireIfNeeded(redisDb *db, robj *key, int flags) {
  * This function must be called at least once before starting to populate
  * the result, and can be called repeatedly to enlarge the result array.
  */
+// 已看，看明白了
 keyReference *getKeysPrepareResult(getKeysResult *result, int numkeys) {
     /* GETKEYS_RESULT_INIT initializes keys to NULL, point it to the pre-allocated stack
      * buffer here. */
@@ -1906,6 +1916,7 @@ int64_t getAllKeySpecsFlags(struct redisCommand *cmd, int inv) {
  * GET_KEYSPEC_RETURN_PARTIAL:   Skips invalid and incomplete keyspecs but returns the keys
  *                               found in other valid keyspecs. 
  */
+// ZZJ TODO 没看懂，后面用到再看
 int getKeysUsingKeySpecs(struct redisCommand *cmd, robj **argv, int argc, int search_flags, getKeysResult *result) {
     long j, i, last, first, step;
     keyReference *keys;
@@ -2266,6 +2277,7 @@ int genericGetKeys(int storeKeyOfs, int keyCountOfs, int firstKeyOfs, int keySte
     return result->numkeys;
 }
 
+// 下面就都是xxxGetKeys了，可以等用到了再看
 int sintercardGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     UNUSED(cmd);
     return genericGetKeys(0, 1, 2, 1, argv, argc, result);

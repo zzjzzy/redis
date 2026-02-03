@@ -45,7 +45,7 @@ object.c 【Memory introspection】以上都看完了，其他部分等用到了
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
 server.c typedef struct RedisModuleType
-db.c(2560行) 正在看，看到scanDatabaseForReadyKeys（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
+db.c(2560行) 正在看，看到genericGetKeys（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
 networking.c(4589行)
 expire.c
@@ -131,6 +131,7 @@ dictResetIterator会dictResumeRehashing
 - RDB文件是什么样的？
 
 ## 笔记
+### generate-command-code.py 这个文件可以用于生成新的redis命令，可以试下
 ### 源码读着很顺，一个文件从上往下读就可以，不用跳来跳去，基本是你读到一个方法定义，下面很快就会用到这个方法。
 ### redis中用到的数据结构，这个方法应该能说明问题
 ```c

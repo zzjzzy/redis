@@ -2134,6 +2134,8 @@ typedef struct {
     /* Declarative data */
     const char *notes;
     uint64_t flags;
+    // 因为bs字段是union结构，所以需要通过type指定用的哪个结构
+    // type定义看typedef enum { xxx } kspec_bs_type;
     kspec_bs_type begin_search_type;
     union {
         struct {
@@ -2149,6 +2151,7 @@ typedef struct {
             int startfrom;
         } keyword;
     } bs;
+    // type定义看typedef enum { xxx } kspec_fk_type
     kspec_fk_type find_keys_type;
     union {
         /* NOTE: Indices in this struct are relative to the result of the begin_search step!
@@ -2333,6 +2336,14 @@ typedef int redisGetKeysProc(struct redisCommand *cmd, robj **argv, int argc, ge
  *    specific data structures, such as: DEL, RENAME, MOVE, SELECT,
  *    TYPE, EXPIRE*, PEXPIRE*, TTL, PTTL, ...
  */
+// 已看，这个结构体对应commands.def中的command table
+// {MAKE_CMD("set","Sets the string value of a key, ignoring its type. The key is created if it doesn't exist.","O(1)","1.0.0",
+// CMD_DOC_NONE,NULL,NULL,"string",COMMAND_GROUP_STRING,SET_History,4,SET_Tips,0,setCommand,-3,CMD_WRITE|CMD_DENYOOM,
+// ACL_CATEGORY_STRING,SET_Keyspecs,1,setGetKeys,5),.args=SET_Args},
+// SET_Keyspecs定义如下
+// keySpec SET_Keyspecs[1] = {
+// {"RW and ACCESS due to the optional `GET` argument",CMD_KEY_RW|CMD_KEY_ACCESS|CMD_KEY_UPDATE|CMD_KEY_VARIABLE_FLAGS,KSPEC_BS_INDEX,.bs.index={1},KSPEC_FK_RANGE,.fk.range={0,1,0}}
+// };
 struct redisCommand {
     /* Declarative data */
     const char *declared_name; /* A string representing the command declared_name.
@@ -2350,12 +2361,16 @@ struct redisCommand {
     int num_tips;
     redisCommandProc *proc; /* Command implementation */
     int arity; /* Number of arguments, it is possible to use -N to say >= N */
+    // server.h中定义的，从#define CMD_KEY_RO开始
     uint64_t flags; /* Command flags, see CMD_*. */
+    // server.h中定义的，从#define ACL_CATEGORY_KEYSPACE开始
     uint64_t acl_categories; /* ACl categories, see ACL_CATEGORY_*. */
+    // 参考 keySpec SET_Keyspecs[1] = xxx
     keySpec *key_specs;
     int key_specs_num;
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect (may be NULL) */
+    // getKeys处理函数，对应db.c中的实现，比如对于set命令，就是db.c中的setGetKeys函数
     redisGetKeysProc *getkeys_proc;
     int num_args; /* Length of args array. */
     /* Array of subcommands (may be NULL) */
