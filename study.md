@@ -26,7 +26,7 @@ sds.c 看完了
 ===== set or list =====
 intset.c（set小对象用） 看完了
 skiplist(zset的底层实现(大对象)) 不用看（在t_zset中实现的，直接看t_zset）
-adlist.c（被listpack替代） 看完了（scanGenericCommand用的adlist装的scan结果）
+adlist.c（被listpack替代） 看完了（scanGenericCommand用的adlist装的scan结果，server.h中也有很多内部结构使用adlist，比如list *clients;）
 listpack（替代ziplist） 看完了
 ziplist 可以先不看，后面看其他部分的时候如果看到了，再看
 quicklist(adlist+listpack的混合,list的唯一实现) 看完了
@@ -45,20 +45,21 @@ object.c 【Memory introspection】以上都看完了，其他部分等用到了
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
 server.c typedef struct RedisModuleType
-db.c(2560行) 正在看，看到genericGetKeys（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
+db.c(2560行) 已看完（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
-networking.c(4589行)
-expire.c
-connection.c(h)
-notify.c
-timeout.c
-blocked.c
-rax(STREAM 的核心)
-zmalloc.c
-ae.c(事件驱动)
-cluster.c
-multi.c
-rdb.c
+networking.c(4589行) 正在看，看到linkClient
+atomicvar.h 已看完，这个没有实现，只是重新define了下c原生的功能
+expire.c(754行)
+connection.c(208行)
+notify.c(145行)
+timeout.c(202行) 
+blocked.c(767行)
+rax(STREAM 的核心)(1927行)
+zmalloc.c(852行)
+ae.c(事件驱动)(512行)
+cluster.c(7825行)
+multi.c(500行)
+rdb.c(3722行)
 
 ===== 废弃 =====
 zipmap.c 不用学

@@ -2077,6 +2077,7 @@ struct redisServer {
 #define MAX_KEYS_BUFFER 256
 
 typedef struct {
+    // 这个是client.argv(robj **argv)的索引，指定key所在的参数位置
     int pos; /* The position of the key within the client array */
     int flags; /* The flags associated with the key access, see
                   CMD_KEY_* for more information */
@@ -2359,6 +2360,7 @@ struct redisCommand {
     int num_history;
     const char **tips; /* An array of strings that are meant to be tips for clients/proxies regarding this command */
     int num_tips;
+    // 命令实现，比如t_string.c中的setCommand
     redisCommandProc *proc; /* Command implementation */
     int arity; /* Number of arguments, it is possible to use -N to say >= N */
     // server.h中定义的，从#define CMD_KEY_RO开始
@@ -2371,6 +2373,7 @@ struct redisCommand {
     /* Use a function to determine keys arguments in a command line.
      * Used for Redis Cluster redirect (may be NULL) */
     // getKeys处理函数，对应db.c中的实现，比如对于set命令，就是db.c中的setGetKeys函数
+    // 可以通过查看redisCommand.getkeys_proc调用的地方，判断这个是怎么用的
     redisGetKeysProc *getkeys_proc;
     int num_args; /* Length of args array. */
     /* Array of subcommands (may be NULL) */

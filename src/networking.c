@@ -57,6 +57,7 @@ size_t getStringObjectSdsUsedMemory(robj *o) {
     serverAssertWithInfo(NULL,o,o->type == OBJ_STRING);
     switch(o->encoding) {
     case OBJ_ENCODING_RAW: return sdsZmallocSize(o->ptr);
+    // OBJ_ENCODING_EMBSTR的string(sds)直接接在robj后面，分配内存的时候就是直接分配的size(robj)+len(sds)
     case OBJ_ENCODING_EMBSTR: return zmalloc_size(o)-sizeof(robj);
     default: return 0; /* Just integer encoding for now. */
     }
@@ -92,8 +93,10 @@ void linkClient(client *c) {
     /* Note that we remember the linked list node where the client is stored,
      * this way removing the client in unlinkClient() will not require
      * a linear scan, but just a constant time operation. */
+    // client记录list中listNode的指针，这样可以通过client快速定位到listNode是什么，这样删除client的时候也更方便找到是哪个node
     c->client_list_node = listLast(server.clients);
     uint64_t id = htonu64(c->id);
+    // ZZJ TODO 这个还没看
     raxInsert(server.clients_index,(unsigned char*)&id,sizeof(id),c,NULL);
 }
 

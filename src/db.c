@@ -1817,6 +1817,7 @@ int keyIsExpired(redisDb *db, robj *key) {
  *
  * The return value of the function is 0 if the key is still valid,
  * otherwise the function returns 1 if the key is expired. */
+// 已看，但是没有详细研究每一行，后面有需要再看
 int expireIfNeeded(redisDb *db, robj *key, int flags) {
     if (server.lazy_expire_disabled) return 0;
     if (!keyIsExpired(db,key)) return 0;
@@ -1872,7 +1873,7 @@ int expireIfNeeded(redisDb *db, robj *key, int flags) {
  * This function must be called at least once before starting to populate
  * the result, and can be called repeatedly to enlarge the result array.
  */
-// 已看，看明白了
+// 已看，看明白了，就在在getKeys之前，先扩容getKeysResult（如果有必要）
 keyReference *getKeysPrepareResult(getKeysResult *result, int numkeys) {
     /* GETKEYS_RESULT_INIT initializes keys to NULL, point it to the pre-allocated stack
      * buffer here. */
@@ -1916,7 +1917,7 @@ int64_t getAllKeySpecsFlags(struct redisCommand *cmd, int inv) {
  * GET_KEYSPEC_RETURN_PARTIAL:   Skips invalid and incomplete keyspecs but returns the keys
  *                               found in other valid keyspecs. 
  */
-// ZZJ TODO 没看懂，后面用到再看
+// ZZJ 已看，根据cmd.key_specs提取key到result中
 int getKeysUsingKeySpecs(struct redisCommand *cmd, robj **argv, int argc, int search_flags, getKeysResult *result) {
     long j, i, last, first, step;
     keyReference *keys;
@@ -1926,6 +1927,8 @@ int getKeysUsingKeySpecs(struct redisCommand *cmd, robj **argv, int argc, int se
         keySpec *spec = cmd->key_specs + j;
         serverAssert(spec->begin_search_type != KSPEC_BS_INVALID);
         /* Skip specs that represent 'fake' keys */
+        // 查看commands.def中使用CMD_KEY_NOT_KEY的地方，发现是pub sub会使用，这就可以理解了，因为pub sub时key可能还不存在，所以是'fake' key
+        // GET_KEYSPEC_INCLUDE_NOT_KEYS: fake key 也可以当做key来处理，这里取反，就是不当做key处理，所以需要跳过
         if ((spec->flags & CMD_KEY_NOT_KEY) && !(search_flags & GET_KEYSPEC_INCLUDE_NOT_KEYS)) {
             continue;
         }
@@ -1935,6 +1938,7 @@ int getKeysUsingKeySpecs(struct redisCommand *cmd, robj **argv, int argc, int se
             first = spec->bs.index.pos;
         } else if (spec->begin_search_type == KSPEC_BS_KEYWORD) {
             int start_index = spec->bs.keyword.startfrom > 0 ? spec->bs.keyword.startfrom : argc+spec->bs.keyword.startfrom;
+            // 注意这里，如果startfrom是负数，代表到这查找，也就是查找-2，-3，-4...，所以如果startfrom是负数，是从[1...-2]这种查询
             int end_index = spec->bs.keyword.startfrom > 0 ? argc-1: 1;
             for (i = start_index; i != end_index; i = start_index <= end_index ? i + 1 : i - 1) {
                 if (i >= argc || i < 1)
@@ -2044,8 +2048,10 @@ invalid_spec:
  *
  * 'cmd' must be point to the corresponding entry into the redisCommand
  * table, according to the command name in argv[0]. */
+// 可以通过查看这个方法调用的地方，查看redisCommand.getkeys_proc是怎么用的
 int getKeysFromCommandWithSpecs(struct redisCommand *cmd, robj **argv, int argc, int search_flags, getKeysResult *result) {
     /* The command has at least one key-spec not marked as NOT_KEY */
+    // CMD_KEY_NOT_KEY 没有key的cmd命令，标记一个命令没有key，这里取反，表示至少有一个keyspec是有key的（没有CMD_KEY_NOT_KEY标记）
     int has_keyspec = (getAllKeySpecsFlags(cmd, 1) & CMD_KEY_NOT_KEY);
     /* The command has at least one key-spec marked as VARIABLE_FLAGS */
     int has_varflags = (getAllKeySpecsFlags(cmd, 0) & CMD_KEY_VARIABLE_FLAGS);
@@ -2061,6 +2067,7 @@ int getKeysFromCommandWithSpecs(struct redisCommand *cmd, robj **argv, int argc,
 
     /* Resort to getkeys callback methods. */
     if (cmd->flags & CMD_MODULE_GETKEYS)
+        // ZZJ TODO 这个还没看
         return moduleGetCommandKeysViaAPI(cmd,argv,argc,result);
 
     /* We use native getkeys as a last resort, since not all these native getkeys provide
@@ -2101,6 +2108,7 @@ ChannelSpecs commands_with_channels[] = {
 
 /* Returns 1 if the command may access any channels matched by the flags
  * argument. */
+// 已看
 int doesCommandHaveChannelsWithFlags(struct redisCommand *cmd, int flags) {
     /* If a module declares get channels, we are just going to assume
      * has channels. This API is allowed to return false positives. */
@@ -2128,10 +2136,12 @@ int doesCommandHaveChannelsWithFlags(struct redisCommand *cmd, int flags) {
  *
  * 'cmd' must be point to the corresponding entry into the redisCommand
  * table, according to the command name in argv[0]. */
+// 已看
 int getChannelsFromCommand(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     keyReference *keys;
     /* If a module declares get channels, use that. */
     if (cmd->flags & CMD_MODULE_GETCHANNELS) {
+        // ZZJ TODO 还没看
         return moduleGetCommandChannelsViaAPI(cmd, argv, argc, result);
     }
     /* Otherwise check the channel spec table */
@@ -2163,6 +2173,7 @@ int getChannelsFromCommand(struct redisCommand *cmd, robj **argv, int argc, getK
  * 
  * NOTE: This function does not guarantee populating the flags for 
  * the keys, in order to get flags you should use getKeysUsingKeySpecs. */
+// 已看
 int getKeysUsingLegacyRangeSpec(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     int j, i = 0, last, first, step;
     keyReference *keys;
@@ -2218,10 +2229,12 @@ int getKeysUsingLegacyRangeSpec(struct redisCommand *cmd, robj **argv, int argc,
  *
  * This function uses the command table if a command-specific helper function
  * is not required, otherwise it calls the command-specific function. */
+// 可以通过查看这个方法调用的地方，查看redisCommand.getkeys_proc是怎么用的
 int getKeysFromCommand(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     if (cmd->flags & CMD_MODULE_GETKEYS) {
         return moduleGetCommandKeysViaAPI(cmd,argv,argc,result);
     } else if (cmd->getkeys_proc) {
+        // getkeys_proc就是db.c中的方法，比如下面的setGetKeys
         return cmd->getkeys_proc(cmd,argv,argc,result);
     } else {
         return getKeysUsingLegacyRangeSpec(cmd,argv,argc,result);
@@ -2247,6 +2260,7 @@ void getKeysFreeResult(getKeysResult *result) {
  * 'keyStep': the interval of each key, usually this value is 1.
  * 
  * The commands using this function have a fully defined keyspec, so returning flags isn't needed. */
+// 已看
 int genericGetKeys(int storeKeyOfs, int keyCountOfs, int firstKeyOfs, int keyStep,
                     robj **argv, int argc, getKeysResult *result) {
     int i, num;
@@ -2355,6 +2369,7 @@ int sortROGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult
  * correctly identify keys in the "STORE" option. 
  * 
  * This command declares incomplete keys, so the flags are correctly set for this function */
+// 没细看，用到了再看
 int sortGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     int i, j, num, found_store = 0;
     keyReference *keys;
@@ -2400,6 +2415,7 @@ int sortGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *
 }
 
 /* This command declares incomplete keys, so the flags are correctly set for this function */
+// 没细看，用到了再看
 int migrateGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     int i, j, num, first;
     keyReference *keys;
@@ -2457,6 +2473,7 @@ int migrateGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResul
  * GEORADIUSBYMEMBER key member radius unit ... options ...
  * 
  * This command has a fully defined keyspec, so returning flags isn't needed. */
+// 没细看，用到了再看
 int georadiusGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     int i, num;
     keyReference *keys;
@@ -2498,6 +2515,7 @@ int georadiusGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysRes
  *       STREAMS key_1 key_2 ... key_N ID_1 ID_2 ... ID_N
  *
  * This command has a fully defined keyspec, so returning flags isn't needed. */
+// 没细看，用到了再看
 int xreadGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     int i, num = 0;
     keyReference *keys;
@@ -2546,6 +2564,7 @@ int xreadGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult 
 
 /* Helper function to extract keys from the SET command, which may have
  * a read flag if the GET argument is passed in. */
+// 已看
 int setGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     keyReference *keys;
     UNUSED(cmd);
@@ -2571,6 +2590,7 @@ int setGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *r
 
 /* Helper function to extract keys from the BITFIELD command, which may be
  * read-only if the BITFIELD GET subcommand is used. */
+// 没细看，用到了再看
 int bitfieldGetKeys(struct redisCommand *cmd, robj **argv, int argc, getKeysResult *result) {
     keyReference *keys;
     int readonly = 1;
