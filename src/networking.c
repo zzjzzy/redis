@@ -127,6 +127,7 @@ client *createClient(connection *conn) {
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
     if (conn) {
+        // ZZJ TODO 下面几个设置conn的方法还没看
         connEnableTcpNoDelay(conn);
         if (server.tcpkeepalive)
             connKeepAlive(conn,server.tcpkeepalive);
@@ -192,6 +193,7 @@ client *createClient(connection *conn) {
     c->obuf_soft_limit_reached_time = 0;
     listSetFreeMethod(c->reply,freeClientReplyValue);
     listSetDupMethod(c->reply,dupClientReplyValue);
+    // ZZJ TODO 这个还没看
     initClientBlockingState(c);
     c->woff = 0;
     c->watched_keys = listCreate();
@@ -216,6 +218,7 @@ client *createClient(connection *conn) {
     c->mem_usage_bucket = NULL;
     c->mem_usage_bucket_node = NULL;
     if (conn) linkClient(c);
+    // ZZJ TODO 这个还没看
     initClientMultiState(c);
     return c;
 }
@@ -232,6 +235,7 @@ void installClientWriteHandler(client *c) {
     {
         ae_barrier = 1;
     }
+    // ZZJ TODO connSetWriteHandlerWithBarrier还没看
     if (connSetWriteHandlerWithBarrier(c->conn, sendReplyToClient, ae_barrier) == C_ERR) {
         freeClientAsync(c);
     }
@@ -285,6 +289,7 @@ void putClientInPendingWriteQueue(client *c) {
  * Typically gets called every time a reply is built, before adding more
  * data to the clients output buffers. If the function returns C_ERR no
  * data should be appended to the output buffers. */
+// ZZJ TODO 还没看明白
 int prepareClientToWrite(client *c) {
     /* If it's the Lua client we always return ok without installing any
      * handler since there is no socket at all. */
@@ -330,6 +335,7 @@ int prepareClientToWrite(client *c) {
  * zmalloc_usable_size() call. Writing beyond client->buf boundaries confuses
  * sanitizer and generates a false positive out-of-bounds error */
 REDIS_NO_SANITIZE("bounds")
+// 已看，把s数据copy到c.buf中，同时更新c.bufpos和c.buf_peak
 size_t _addReplyToBuffer(client *c, const char *s, size_t len) {
     size_t available = c->buf_usable_size - c->bufpos;
 
@@ -348,6 +354,7 @@ size_t _addReplyToBuffer(client *c, const char *s, size_t len) {
 
 /* Adds the reply to the reply linked list.
  * Note: some edits to this function need to be relayed to AddReplyFromClient. */
+// 把s放到reply_list中，list是clientReplyBlock类型的，如果s超过了buf大小，则会新建个clientReplyBlock
 void _addReplyProtoToList(client *c, list *reply_list, const char *s, size_t len) {
     listNode *ln = listLast(reply_list);
     clientReplyBlock *tail = ln? listNodeValue(ln): NULL;
@@ -394,6 +401,8 @@ int cmdHasPushAsReply(struct redisCommand *cmd) {
            cmd->proc == ssubscribeCommand || cmd->proc == sunsubscribeCommand;
 }
 
+// 已看，通过这个方法总结出
+// client有个char *buf字段和一个list *reply字段，这两个字段用来缓存reply数据
 void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
     if (c->flags & CLIENT_CLOSE_AFTER_REPLY) return;
 
@@ -410,6 +419,7 @@ void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
 
     /* We call it here because this function may affect the reply
      * buffer offset (see function comment) */
+    // ZZJ TODO 这个还没看
     reqresSaveClientReplyOffset(c);
 
     /* If we're processing a push message into the current client (i.e. executing PUBLISH
@@ -418,6 +428,7 @@ void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
      * the SUBSCRIBE command family, which (currently) have a push message instead of a proper reply.
      * The check for executing_client also avoids affecting push messages that are part of eviction.
      * Check CLIENT_PUSHING first to avoid race conditions, as it's absent in module's fake client. */
+    // ZZJ TODO 这个已看，但是没看懂，等看了pub sub相关的再看
     if ((c->flags & CLIENT_PUSHING) && c == server.current_client &&
         server.executing_client && !cmdHasPushAsReply(server.executing_client->cmd))
     {
@@ -425,6 +436,8 @@ void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
         return;
     }
 
+    // 先加个client.buf字段中，如果buf中放不下，就放到client.reply回复列表中
+    // ZZJ TODO 这里有个疑问，如果buf的数据被回复了，buf会被清空吗，如果清空了，新数据会被写入buf，那reply中的数据怎么办，新数据岂不是被放到了reply的旧数据的前面
     size_t reply_len = _addReplyToBuffer(c,s,len);
     if (len > reply_len) _addReplyProtoToList(c,c->reply,s+reply_len,len-reply_len);
 }

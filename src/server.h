@@ -934,6 +934,7 @@ struct evictionPoolEntry; /* Defined in evict.c */
 
 /* This structure is used in order to represent the output buffer of a client,
  * which is actually a linked list of blocks like that, that is: client->reply. */
+// 已看
 typedef struct clientReplyBlock {
     size_t size, used;
     char buf[];
@@ -1189,6 +1190,7 @@ typedef struct client {
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
     list *reply;            /* List of reply objects to send to the client. */
+    // 已看，_addReplyProtoToList有使用这个字段
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
     list *deferred_reply_errors;    /* Used for module thread safe contexts. */
     size_t sentlen;         /* Amount of bytes already sent in the current
@@ -2360,7 +2362,7 @@ struct redisCommand {
     int num_history;
     const char **tips; /* An array of strings that are meant to be tips for clients/proxies regarding this command */
     int num_tips;
-    // 命令实现，比如t_string.c中的setCommand
+    // 命令实现，比如t_string.c中的setCommand，也可以看下cmdHasPushAsReply(networking.c)中的实现，这种指针是指向一个方法地址的
     redisCommandProc *proc; /* Command implementation */
     int arity; /* Number of arguments, it is possible to use -N to say >= N */
     // server.h中定义的，从#define CMD_KEY_RO开始
