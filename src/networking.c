@@ -530,6 +530,7 @@ void afterErrorReply(client *c, const char *s, size_t len, int flags) {
          * If the string already starts with "-..." then the error prefix
          * is provided by the caller ( we limit the search to 32 chars). Otherwise we use "-ERR". */
         if (s[0] != '-') {
+            // ZZJ TODO 这个还没看
             incrementErrorCount("ERR", 3);
         } else {
             char *spaceloc = memchr(s, ' ', len < 32 ? len : 32);
@@ -582,6 +583,7 @@ void afterErrorReply(client *c, const char *s, size_t len, int flags) {
         if (ctype == CLIENT_TYPE_MASTER && server.repl_backlog &&
             server.repl_backlog->histlen > 0)
         {
+            // ZZJ TODO 这个还没看
             showLatestBacklog();
         }
         server.stat_unexpected_error_replies++;
@@ -648,6 +650,8 @@ void addReplyErrorSds(client *c, sds err) {
 
 /* See addReplyErrorLength for expectations from the input string. */
 /* As a side effect the SDS string is freed. */
+// addReplyErrorLength会自动添加上\r\n后缀，所以这个需要把\r\n替换掉
+// 应该是为了避免有误添加或重复添加的情况
 void addReplyErrorSdsSafe(client *c, sds err) {
     err = sdsmapchars(err, "\r\n", "  ",  2);
     addReplyErrorSdsEx(c, err, 0);
@@ -765,6 +769,7 @@ void *addReplyDeferredLen(client *c) {
 
     /* We call it here because this function conceptually affects the reply
      * buffer offset (see function comment) */
+    // ZZJ TODO 这个还没看
     reqresSaveClientReplyOffset(c);
 
     trimReplyUnusedTailSpace(c);
@@ -842,6 +847,8 @@ void setDeferredAggregateLen(client *c, void *node, long length, char prefix) {
     /* Things like *2\r\n, %3\r\n or ~4\r\n are emitted very often by the protocol
      * so we have a few shared objects to use if the integer is small
      * like it is most of the times. */
+    // hdr_len就是指【*2\r\n】这个的长度，如果length小于10，【*2\r\n】长度就是4，否则就是5，比如【*12\r\n】
+    // 因为只会在length<32的时候用这个（length < OBJ_SHARED_BULKHDR_LEN），所以hdr_len不会超过3位数
     const size_t hdr_len = OBJ_SHARED_HDR_STRLEN(length);
     const int opt_hdr = length < OBJ_SHARED_BULKHDR_LEN;
     if (prefix == '*' && opt_hdr) {
@@ -862,6 +869,7 @@ void setDeferredAggregateLen(client *c, void *node, long length, char prefix) {
     setDeferredReply(c, node, lenstr, lenstr_len);
 }
 
+// 下面几个方法可以看出不同前缀分别代表了什么类型的返回数据
 void setDeferredArrayLen(client *c, void *node, long length) {
     setDeferredAggregateLen(c,node,length,'*');
 }
@@ -904,6 +912,7 @@ void addReplyDouble(client *c, double d) {
          * for maximum header `$0000\r\n`, print double, add the resp header in
          * front of it, and then send the buffer with the right `start` offset. */
         const int dlen = d2string(dbuf+7,sizeof(dbuf)-7,d);
+        // dlen用十进制表示时的位数。因为buf预留了4位十进制的长度【$0000\r\n】，如果长度小于4位，start就不是从0开始，需要后移
         int digits = digits10(dlen);
         int start = 4 - digits;
         serverAssert(start >= 0);
@@ -3835,6 +3844,7 @@ size_t getClientMemoryUsage(client *c, size_t *output_buffer_mem_usage) {
  * CLIENT_TYPE_PUBSUB -> Client subscribed to Pub/Sub channels
  * CLIENT_TYPE_MASTER -> The client representing our replication master.
  */
+// 已看
 int getClientType(client *c) {
     if (c->flags & CLIENT_MASTER) return CLIENT_TYPE_MASTER;
     /* Even though MONITOR clients are marked as replicas, we

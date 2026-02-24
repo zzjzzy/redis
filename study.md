@@ -47,7 +47,7 @@ server.h struct client 已看完，后面有用到啥字段再看就行
 server.c typedef struct RedisModuleType
 db.c(2560行) 已看完（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
-networking.c(4589行) 正在看，看到addReplyProto（prepareClientToWrite没太看明白，把后面看完后再回来看一遍）（看完这个再会看一个比如t_string.c，看下addReply怎么用的）
+networking.c(4589行) 正在看，看到addReplySubcommandSyntaxError（prepareClientToWrite没太看明白，把后面看完后再回来看一遍）（看完这个再会看一个比如t_string.c，看下addReply怎么用的）
 atomicvar.h(158行) 已看完，这个没有实现，只是重新define了下c原生的功能
 expire.c(754行)
 connection.c(208行)
@@ -56,7 +56,7 @@ anet.c(730行)
 notify.c(145行)
 timeout.c(202行) 
 blocked.c(767行)
-rax(STREAM 的核心)(1927行)
+rax.c(基数树，STREAM 的核心)(1927行)
 zmalloc.c(852行)
 ae.c(事件驱动)(512行)
 cluster.c(7825行)
