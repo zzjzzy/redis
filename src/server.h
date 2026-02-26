@@ -959,6 +959,7 @@ typedef struct clientReplyBlock {
 
 /* Similar with 'clientReplyBlock', it is used for shared buffers between
  * all replica clients and replication backlog. */
+// 已看，等看到复制的时候再详细研究
 typedef struct replBufBlock {
     int refcount;           /* Number of replicas or repl backlog using. */
     long long id;           /* The unique incremental number. */
@@ -1232,6 +1233,7 @@ typedef struct client {
     dict *pubsubshard_channels;  /* shard level channels a client is interested in (SSUBSCRIBE) */
     sds peerid;             /* Cached peer ID. */
     sds sockname;           /* Cached connection target address. */
+    // client会被封装为listNode放到server.clients中，这个字段保存的就是client对应的listNode
     listNode *client_list_node; /* list node in client list */
     listNode *postponed_list_node; /* list node within the postponed list */
     listNode *pending_read_list_node; /* list node in clients pending read list */

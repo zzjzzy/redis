@@ -1259,6 +1259,7 @@ int clientHasPendingReplies(client *c) {
          * we have nothing to send. */
         listNode *ln = listLast(server.repl_buffer_blocks);
         replBufBlock *tail = listNodeValue(ln);
+        // c.ref_repl_buf_node是最后一个，并且c.ref_block_pos等于tail.used，就说明当前client的数据都已经发送了
         if (ln == c->ref_repl_buf_node &&
             c->ref_block_pos == tail->used) return 0;
 
@@ -1433,6 +1434,7 @@ void disconnectSlaves(void) {
     }
 }
 
+// ZZJ PRV2 expect me -> except me
 /* Check if there is any other slave waiting dumping RDB finished expect me.
  * This function is useful to judge current dumping RDB can be used for full
  * synchronization or not. */
@@ -1479,6 +1481,7 @@ void unlinkClient(client *c) {
             c->replstate == SLAVE_STATE_WAIT_BGSAVE_END &&
             server.rdb_pipe_conns)
         {
+            // ZZJ TODO 这里还没看懂
             int i;
             for (i=0; i < server.rdb_pipe_numconns; i++) {
                 if (server.rdb_pipe_conns[i] == c->conn) {
@@ -1565,6 +1568,7 @@ void clearClientConnectionState(client *c) {
      * represent the client library behind the connection. */
     
     /* Selectively clear state flags not covered above */
+    // 把每一位取反后，再和原来的位进行与(&)，就可以实现将这一位置为0了
     c->flags &= ~(CLIENT_ASKING|CLIENT_READONLY|CLIENT_PUBSUB|CLIENT_REPLY_OFF|
                   CLIENT_REPLY_SKIP_NEXT|CLIENT_NO_TOUCH|CLIENT_NO_EVICT);
 }
