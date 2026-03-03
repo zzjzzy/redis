@@ -424,6 +424,7 @@ typedef enum blocking_type {
 
 /* Client classes for client limits, currently used only for
  * the max-client-output-buffer limit implementation. */
+// ZZJ PRV2 ZZJ TODO 注释写的只用于“max-client-output-buffer”？但是看到很多地方都在用了
 #define CLIENT_TYPE_NORMAL 0 /* Normal req-reply clients + MONITORs */
 #define CLIENT_TYPE_SLAVE 1  /* Slaves. */
 #define CLIENT_TYPE_PUBSUB 2 /* Clients subscribed to PubSub channels. */
@@ -1191,9 +1192,11 @@ typedef struct client {
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
     list *reply;            /* List of reply objects to send to the client. */
-    // 已看，_addReplyProtoToList有使用这个字段
+    // 已看，_addReplyProtoToList有使用这个字段，c.reply中clientReplyBlock.size的大小总和
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
     list *deferred_reply_errors;    /* Used for module thread safe contexts. */
+    // networking.c _writevToClient有用到，标记c.buf已经发送的字节数
+    // 看_writevToClient方法中的一个注释详细了解
     size_t sentlen;         /* Amount of bytes already sent in the current
                                buffer or object being sent. */
     time_t ctime;           /* Client creation time. */
@@ -1271,8 +1274,10 @@ typedef struct client {
     listNode *mem_usage_bucket_node;
     clientMemUsageBucket *mem_usage_bucket;
 
+    // 这个listNode的val类型是replBufBlock，表示当前发送到哪个node了，用于CLIENT_TYPE_SLAVE
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
+    // 这个字段对应上面的ref_repl_buf_node，表示已经发送的字节数
     size_t ref_block_pos;        /* Access position of referenced buffer block,
                                   * i.e. the next offset to send. */
 

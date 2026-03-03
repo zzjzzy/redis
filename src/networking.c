@@ -1260,6 +1260,7 @@ int clientHasPendingReplies(client *c) {
         listNode *ln = listLast(server.repl_buffer_blocks);
         replBufBlock *tail = listNodeValue(ln);
         // c.ref_repl_buf_node是最后一个，并且c.ref_block_pos等于tail.used，就说明当前client的数据都已经发送了
+        // ref_repl_buf_node表示已经发送到哪个node了
         if (ln == c->ref_repl_buf_node &&
             c->ref_block_pos == tail->used) return 0;
 
@@ -1840,6 +1841,7 @@ client *lookupClientByID(uint64_t id) {
 static int _writevToClient(client *c, ssize_t *nwritten) {
     int iovcnt = 0;
     int iovmax = min(IOV_MAX, c->conn->iovcnt);
+    // 这是个iovec数组，iov[0]保存c.buf中的数据
     struct iovec iov[iovmax];
     size_t iov_bytes_len = 0;
     /* If the static reply buffer is not empty, 
@@ -1851,6 +1853,7 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
     }
     /* The first node of reply list might be incomplete from the last call,
      * thus it needs to be calibrated to get the actual data address and length. */
+    // ZZJ TODO 这里没太看明白，c.bufpos不是代码c.buf的位置吗，为什么这个offset用于后面c.reply中的listNode了
     size_t offset = c->bufpos > 0 ? 0 : c->sentlen;
     listIter iter;
     listNode *next;
@@ -1867,6 +1870,7 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
 
         iov[iovcnt].iov_base = o->buf + offset;
         iov[iovcnt].iov_len = o->used - offset;
+        // 每一个list分别放到iov[i]中
         iov_bytes_len += iov[iovcnt++].iov_len;
         offset = 0;
     }
@@ -1899,6 +1903,8 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
         remaining -= (ssize_t)(o->used - c->sentlen);
         c->reply_bytes -= o->size;
         listDelNode(c->reply, next);
+        // 从这个c.sentlen会置为0可以看出，c.sentlen表示的是当前这个listNode已发送的长度，不是所有c.buf和c.reply已发送的长度
+        // 所以上面o.used-c.sentlen的写法没问题
         c->sentlen = 0;
     }
 
@@ -1932,6 +1938,7 @@ int _writeToClient(client *c, ssize_t *nwritten) {
             ((replBufBlock *)(listNodeValue(next)))->refcount++;
             c->ref_repl_buf_node = next;
             c->ref_block_pos = 0;
+            // ZZJ TODO 这个还没看
             incrementalTrimReplicationBacklog(REPL_BACKLOG_TRIM_BLOCKS_PER_CALL);
         }
         return C_OK;
@@ -2041,6 +2048,7 @@ int writeToClient(client *c, int handler_installed) {
      * Since this isn't thread safe we do this conditionally. In case of threaded writes this is done in
      * handleClientsWithPendingWritesUsingThreads(). */
     if (io_threads_op == IO_THREADS_OP_IDLE)
+        // ZZJ TODO 这个还没看
         updateClientMemUsageAndBucket(c);
     return C_OK;
 }
