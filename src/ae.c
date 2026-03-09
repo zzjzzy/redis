@@ -63,7 +63,7 @@
     #endif
 #endif
 
-
+// 创建event loop，对于epoll，就是调用了epoll_create，epoll的fd会被存到eventLoop.apidata中
 aeEventLoop *aeCreateEventLoop(int setsize) {
     aeEventLoop *eventLoop;
     int i;
@@ -112,6 +112,7 @@ void aeSetDontWait(aeEventLoop *eventLoop, int noWait) {
     if (noWait)
         eventLoop->flags |= AE_DONT_WAIT;
     else
+        // 这种方式可以将某一位清零，因为只清零某一位，所以不能直接赋值0
         eventLoop->flags &= ~AE_DONT_WAIT;
 }
 
@@ -168,6 +169,7 @@ int aeCreateFileEvent(aeEventLoop *eventLoop, int fd, int mask,
     }
     aeFileEvent *fe = &eventLoop->events[fd];
 
+    // ae_epoll.c的实现已看，这个就是通过epoll_ctl向epoll_fd中添加一个需要监听的fd
     if (aeApiAddEvent(eventLoop, fd, mask) == -1)
         return AE_ERR;
     fe->mask |= mask;
@@ -189,7 +191,9 @@ void aeDeleteFileEvent(aeEventLoop *eventLoop, int fd, int mask)
      * is removed. */
     if (mask & AE_WRITABLE) mask |= AE_BARRIER;
 
+    // 这个delete不一定是删除fd，也可能是移除某个mask
     aeApiDelEvent(eventLoop, fd, mask);
+    // 取反再进行&操作，相当于清除某一个标志位，比如原来是1，取反后变0，&操作后就是0了，是0的标志位就还是保持原来的值
     fe->mask = fe->mask & (~mask);
     if (fd == eventLoop->maxfd && fe->mask == AE_NONE) {
         /* Update the max fd */
@@ -328,13 +332,16 @@ static int processTimeEvents(aeEventLoop *eventLoop) {
 
             id = te->id;
             te->refcount++;
+            // 到时间了，调用timeProc处理
             retval = te->timeProc(eventLoop, id, te->clientData);
             te->refcount--;
             processed++;
             now = getMonotonicUs();
             if (retval != AE_NOMORE) {
+                // 还需要再次处理，更新下次处理时间
                 te->when = now + (monotime)retval * 1000;
             } else {
+                // retval = AE_NOMORE 表示不需要继续处理了，标记删除
                 te->id = AE_DELETED_EVENT_ID;
             }
         }
@@ -409,6 +416,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         for (j = 0; j < numevents; j++) {
             int fd = eventLoop->fired[j].fd;
+            // ZZJ TODO 这里有空再看下，eventLoop->events不是个数组吗，不应该用数组索引取值吗，为什么用fd取值，难道设计的就是fd当索引？
             aeFileEvent *fe = &eventLoop->events[fd];
             int mask = eventLoop->fired[j].mask;
             int fired = 0; /* Number of events fired for current fd. */

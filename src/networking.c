@@ -127,11 +127,13 @@ client *createClient(connection *conn) {
      * in the context of a client. When commands are executed in other
      * contexts (for instance a Lua script) we need a non connected client. */
     if (conn) {
-        // ZZJ TODO 下面几个设置conn的方法还没看
+        // connEnableTcpNoDelay和connKeepAlive已看，对应的都是调用到了anet.c
         connEnableTcpNoDelay(conn);
         if (server.tcpkeepalive)
             connKeepAlive(conn,server.tcpkeepalive);
+        // 这个已看，对应的是ae.c
         connSetReadHandler(conn, readQueryFromClient);
+        // 这个就简单了
         connSetPrivateData(conn, c);
     }
     c->buf = zmalloc_usable(PROTO_REPLY_CHUNK_BYTES, &c->buf_usable_size);
@@ -1270,6 +1272,7 @@ int clientHasPendingReplies(client *c) {
     }
 }
 
+// 已看，看明白了
 void clientAcceptHandler(connection *conn) {
     client *c = connGetPrivateData(conn);
 
@@ -1324,6 +1327,9 @@ void clientAcceptHandler(connection *conn) {
                           c);
 }
 
+// 这个已看，并且都理解了，看完anet.c那些，这个看的就很顺了
+// socket.c中有调用这个方法，调用这个方法的时候，已经调用accept建立连接了，所以这个方法不处理accept系统调用，是在系统调用后调用的
+// accept系统调用是在socket.c的connSocketAcceptHandler处理
 void acceptCommonHandler(connection *conn, int flags, char *ip) {
     client *c;
     UNUSED(ip);
@@ -1358,6 +1364,7 @@ void acceptCommonHandler(connection *conn, int flags, char *ip) {
         /* That's a best effort error message, don't check write errors.
          * Note that for TLS connections, no handshake was done yet so nothing
          * is written and the connection will just drop. */
+        // 对应到socket.c的connSocketWrite，就是直接进行了系统调用write
         if (connWrite(conn,err,strlen(err)) == -1) {
             /* Nothing to do, Just to avoid the warning... */
         }
@@ -4024,6 +4031,7 @@ void flushSlavesOutputBuffers(void) {
 
 /* Compute current paused actions and its end time, aggregated for
  * all pause purposes. */
+// 从这里到isPausedActionsWithUpdate已看
 void updatePausedActions(void) {
     uint32_t prev_paused_actions = server.paused_actions;
     server.paused_actions = 0;
@@ -4122,6 +4130,7 @@ uint32_t isPausedActions(uint32_t actions_bitmask) {
 }
 
 /* Returns bitmask of paused actions */
+// 已看
 uint32_t isPausedActionsWithUpdate(uint32_t actions_bitmask) {
     if (!(server.paused_actions & actions_bitmask)) return 0;
     updatePausedActions();

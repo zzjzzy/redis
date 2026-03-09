@@ -129,6 +129,7 @@ void expireScanCallback(void *privdata, const dictEntry *const_de) {
     if (activeExpireCycleTryExpire(data->db, de, data->now)) {
         data->expired++;
         /* Propagate the DEL command */
+        // ZZJ TODO 这个还没看
         postExecutionUnitOperations();
     }
     if (ttl > 0) {
@@ -139,6 +140,7 @@ void expireScanCallback(void *privdata, const dictEntry *const_de) {
     data->sampled++;
 }
 
+// 已看，一些细节没研究，目前知道这个方法干什么的就行
 void activeExpireCycle(int type) {
     /* Adjust the running parameters according to the configured expire
      * effort. The default effort is 1, and the maximum configurable effort

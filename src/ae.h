@@ -47,6 +47,7 @@
                            things to disk before sending replies, and want
                            to do that in a group fashion. */
 
+// 用于aeProcessEvents的flags参数
 #define AE_FILE_EVENTS (1<<0)
 #define AE_TIME_EVENTS (1<<1)
 #define AE_ALL_EVENTS (AE_FILE_EVENTS|AE_TIME_EVENTS)

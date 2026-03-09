@@ -84,6 +84,7 @@ int anetSetBlock(char *err, int fd, int non_block) {
 
     /* Check if this flag has been set or unset, if so, 
      * then there is no need to call fcntl to set/unset it again. */
+    // 两次!!操作可以把非0/1的int转成0/1
     if (!!(flags & O_NONBLOCK) == !!non_block)
         return ANET_OK;
 
@@ -110,14 +111,18 @@ int anetBlock(char *err, int fd) {
 /* Enable the FD_CLOEXEC on the given fd to avoid fd leaks. 
  * This function should be invoked for fd's on specific places 
  * where fork + execve system calls are called. */
+// 已看，将fd的flag设置上FD_CLOEXEC这个标志，返回设置的flag
+// FD_CLOEXEC是用来在进程结束时自动释放epoll的fd
 int anetCloexec(int fd) {
     int r;
     int flags;
 
     do {
+        // 先获取旧的flag, F_GETFD是获取fd flag
         r = fcntl(fd, F_GETFD);
     } while (r == -1 && errno == EINTR);
 
+    // flag已经设置了
     if (r == -1 || (r & FD_CLOEXEC))
         return r;
 
@@ -240,6 +245,7 @@ int anetRecvTimeout(char *err, int fd, long long ms) {
  * If flags is set to ANET_IP_ONLY the function only resolves hostnames
  * that are actually already IPv4 or IPv6 addresses. This turns the function
  * into a validating / normalizing function. */
+// 根据host域名解析成ip，结果放到ipbuf中
 int anetResolve(char *err, char *host, char *ipbuf, size_t ipbuf_len,
                        int flags)
 {
@@ -631,6 +637,7 @@ error:
 /* Create a pipe buffer with given flags for read end and write end.
  * Note that it supports the file flags defined by pipe2() and fcntl(F_SETFL),
  * and one of the use cases is O_CLOEXEC|O_NONBLOCK. */
+// ZZJ TODO 这个方法有空再详细研究下
 int anetPipe(int fds[2], int read_flags, int write_flags) {
     int pipe_flags = 0;
 #if defined(__linux__) || defined(__FreeBSD__)
@@ -699,6 +706,7 @@ int anetSetSockMarkId(char *err, int fd, uint32_t id) {
 #endif
 }
 
+// ZZJ TODO 这个可以用来进行进程间通信，有空可以研究下进程间通信
 int anetIsFifo(char *filepath) {
     struct stat sb;
     if (stat(filepath, &sb) == -1) return 0;

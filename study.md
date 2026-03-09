@@ -49,21 +49,24 @@ db.c(2560行) 已看完（db.c引用了很多其他xxx.c，有很多还没看，
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
 networking.c(4589行) 已粗略看完，看到processInlineBuffer，processInlineBuffer及之后粗略过了一遍，不细看了，后面哪里用到了再看（看完这个再会看一个比如t_string.c，看下addReply怎么用的）
 atomicvar.h(158行) 已看完，这个没有实现，只是重新define了下c原生的功能
-expire.c(754行)
-connection.c(208行)
-socket.c(473行)
-anet.c(730行)
-notify.c(145行)
+expire.c(754行) 已粗略看完，就是对expire命令的支持、主动expire等能力，没怎么细看，后面用到有需要再看。
+connection.c(208行) 已看完
+socket.c(473行)  已看完，梳理了一些方法调用流程，想看调用流程，可以搜索这个文件的“流程”关键字
+unix.c(209行) 已看完，这个比较少，用到啥看啥就行
+anet.c(730行) 已看完，是一些socket, listen, connect等网络调用的封装
+ae.c(512行) 已看完，是一些底层的epoll等事件循环操作
+syncio.c(145行) 已看完
+notify.c(145行) 已看完
+pubsub.c(754行) 待看
 timeout.c(202行) 已看完
-blocked.c(767行)
+blocked.c(767行) 正在看
 rax.c(基数树，STREAM 的核心)(1927行)
 zmalloc.c(852行)
-ae.c(事件驱动)(512行)
 cluster.c(7825行)
-multi.c(500行)
+multi.c(500行) 待看
 rdb.c(3722行)
 logreqres.c(315行)
-tracking.c(660行)
+tracking.c(660行) 待看
 module.c(13904行)
 
 ===== 废弃 =====
@@ -137,6 +140,14 @@ dictResetIterator会dictResumeRehashing
 - RDB文件是什么样的？
 
 ## 笔记
+### _anetTcpServer处理地址绑定
+```c
+    // 这段代码就和redis配置文件对上了，指定服务端绑定的地址
+    if (bindaddr && !strcmp("*", bindaddr))
+        bindaddr = NULL;
+    if (af == AF_INET6 && bindaddr && !strcmp("::*", bindaddr))
+        bindaddr = NULL;
+```
 ### generate-command-code.py 这个文件可以用于生成新的redis命令，可以试下
 ### 源码读着很顺，一个文件从上往下读就可以，不用跳来跳去，基本是你读到一个方法定义，下面很快就会用到这个方法。
 ### redis中用到的数据结构，这个方法应该能说明问题

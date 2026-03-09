@@ -73,9 +73,10 @@ static ConnectionType CT_Socket;
  * 3. The container_of() approach is anyway risky because connections may
  * be embedded in different structs, not just client.
  */
-
+// 已看，看明白了，conn.type可以有多种类型，socket.c就是处理socket类型的connect的
 static connection *connCreateSocket(void) {
     connection *conn = zcalloc(sizeof(connection));
+    // CT_Socket就是ConnectType的一种实现
     conn->type = &CT_Socket;
     conn->fd = -1;
     conn->iovcnt = IOV_MAX;
@@ -91,7 +92,7 @@ static connection *connCreateSocket(void) {
  *
  * Callers should use connGetState() and verify the created connection
  * is not in an error state (which is not possible for a socket connection,
- * but could but possible with other protocols).
+ * but could but possible with other protocols). // ZZJ PRV2 多了个but
  */
 static connection *connCreateAcceptedSocket(int fd, void *priv) {
     UNUSED(priv);
@@ -101,8 +102,16 @@ static connection *connCreateAcceptedSocket(int fd, void *priv) {
     return conn;
 }
 
+// 已看，看明白了
+// eventLoop调用流程
+// server.c aeMain -> aeProcessEvents -> epoll_wait
+// epoll_wait拿到就绪事件后，会调用aeFileEvent.rfileProc或者wfileProc
+// rfileProc和wfileProc是aeCreateFileEvent注册的，也就是这个方法里，可以看到rfileProc和wfileProc都是ae_handler
+// 而ae_handler的实现是connSocketEventHandler
+// connSocketEventHandler会调用conn->read_handler处理，conn->read_handler怎么注册在networking.c搜索connSetReadHandler，这里不继续梳理了
 static int connSocketConnect(connection *conn, const char *addr, int port, const char *src_addr,
         ConnectionCallbackFunc connect_handler) {
+    // anetTcpNonBlockBestEffortBindConnect里面会调用connnet方法
     int fd = anetTcpNonBlockBestEffortBindConnect(NULL,addr,port,src_addr);
     if (fd == -1) {
         conn->state = CONN_STATE_ERROR;
@@ -114,6 +123,7 @@ static int connSocketConnect(connection *conn, const char *addr, int port, const
     conn->state = CONN_STATE_CONNECTING;
 
     conn->conn_handler = connect_handler;
+    // connect连接成功后，将连接放到eventLoop中
     aeCreateFileEvent(server.el, conn->fd, AE_WRITABLE,
             conn->type->ae_handler, conn);
 
@@ -198,6 +208,7 @@ static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
     return ret;
 }
 
+// 已看
 static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     int ret = C_OK;
 
@@ -308,6 +319,14 @@ static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientD
     }
 }
 
+// 已看，看明白了
+// accept相关的调用流程是这样:
+// server.c会调用connnectionType.accept_handler，accept_handler绑定的实现就是这个connSocketAcceptHandler
+// connSocketAcceptHandler会进行系统调用accept方法(anetTcpAccept)，然后调用acceptCommonHandler(networking.c)
+// acceptCommonHandler里会调用connAccept(conn, clientAcceptHandler)(connection.h)
+// connAccept会调用connection->type->accept(conn, accept_handler);
+// connection->type->accept就是上面的connSocketAccept(socket.c)实现，调用connSocketAccept时传的accept_handler是acceptCommonHandler(networking.c)传过来的
+// accept_handler具体实现是clientAcceptHandler(networking.c)
 static void connSocketAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];
@@ -320,6 +339,8 @@ static void connSocketAcceptHandler(aeEventLoop *el, int fd, void *privdata, int
         if (cfd == ANET_ERR) {
             if (anetAcceptFailureNeedsRetry(errno))
                 continue;
+            // 如果errno == EWOULDBLOCK，对于非阻塞模式下是正常的，因为如果非阻塞模式下，accept时没有新连接，errno就是EWOULDBLOCK
+            // 所以是正常的，所以errno == EWOULDBLOCK不需要打印warn日志，直接返回即可。
             if (errno != EWOULDBLOCK)
                 serverLog(LL_WARNING,
                     "Accepting client connection: %s", server.neterr);

@@ -63,6 +63,7 @@ typedef enum {
 #define CONN_TYPE_TLS               "tls"
 #define CONN_TYPE_MAX               8           /* 8 is enough to be extendable */
 
+// 这个在networking.c有实现，clientAcceptHandler就是一个实现，然后紧接着clientAcceptHandler的acceptCommonHandler方法就用到了clientAcceptHandler
 typedef void (*ConnectionCallbackFunc)(struct connection *conn);
 
 typedef struct ConnectionType {
@@ -282,6 +283,7 @@ static inline int connLastErrorRetryable(connection *conn) {
 /* Get address information of a connection.
  * remote works as boolean type to get local/remote address */
 static inline int connAddr(connection *conn, char *ip, size_t ip_len, int *port, int remote) {
+    // 这里的conn.type.addr就是anet.c中的anetFdToString，也就是根据fd查询出连接的ip:port
     if (conn && conn->type->addr) {
         return conn->type->addr(conn, ip, ip_len, port, remote);
     }

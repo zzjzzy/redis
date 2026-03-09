@@ -1128,6 +1128,7 @@ void databasesCron(void) {
     }
 }
 
+// 还没看
 static inline void updateCachedTimeWithUs(int update_daylight_info, const long long ustime) {
     server.ustime = ustime;
     server.mstime = server.ustime / 1000;
@@ -1168,6 +1169,7 @@ void updateCachedTime(int update_daylight_info) {
  * the execution unit.
  * update_cached_time - if 0, will not update the cached time even if required.
  * us - if not zero, use this time for cached time, otherwise get current time. */
+// 已看
 void enterExecutionUnit(int update_cached_time, long long us) {
     if (server.execution_nesting++ == 0 && update_cached_time) {
         if (us == 0) {
@@ -2479,6 +2481,7 @@ int createSocketAcceptHandler(connListener *sfd, aeFileProc *accept_handler) {
  * impossible to bind, or no bind addresses were specified in the server
  * configuration but the function is not able to bind * for at least
  * one of the IPv4 or IPv6 protocols. */
+// 已看，根据sfd中指定的地址进行tcp绑定，也就是创建socket并listen
 int listenToPort(connListener *sfd) {
     int j;
     int port = sfd->port;
