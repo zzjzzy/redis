@@ -57,15 +57,17 @@ anet.c(730行) 已看完，是一些socket, listen, connect等网络调用的封
 ae.c(512行) 已看完，是一些底层的epoll等事件循环操作
 syncio.c(145行) 已看完
 notify.c(145行) 已看完
-pubsub.c(754行) 待看
+pubsub.c(754行) 待看  这个后续可以结合pub,sub命令怎么执行的来看
 timeout.c(202行) 已看完
-blocked.c(767行) 正在看
+blocked.c(767行) 正在看，看到updateStatsOnUnblock
+monotonic.c(180行)
+latency.c(739行)
 rax.c(基数树，STREAM 的核心)(1927行)
 zmalloc.c(852行)
 cluster.c(7825行)
 multi.c(500行) 待看
 rdb.c(3722行)
-logreqres.c(315行)
+logreqres.c(315行) 已看完，reqresAppendResponse看的比较粗略
 tracking.c(660行) 待看
 module.c(13904行)
 
