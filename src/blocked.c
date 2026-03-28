@@ -111,11 +111,14 @@ void updateStatsOnUnblock(client *c, long blocked_us, long reply_us, int had_err
     if (had_errors)
         c->lastcmd->failed_calls++;
     if (server.latency_tracking_enabled)
+        // ZZJ TODO 这个还没看
         updateCommandLatencyHistogram(&(c->lastcmd->latency_histogram), total_cmd_duration*1000);
     /* Log the command into the Slow log if needed. */
+    // ZZJ TODO 这个还没看
     slowlogPushCurrentCommand(c, c->lastcmd, total_cmd_duration);
     c->duration = 0;
     /* Log the reply duration event. */
+    // ZZJ TODO 这个还没看
     latencyAddSampleIfNeeded("command-unblocking",reply_us/1000);
 }
 
@@ -135,6 +138,7 @@ void processUnblockedClients(void) {
 
         if (c->flags & CLIENT_MODULE) {
             if (!(c->flags & CLIENT_BLOCKED)) {
+                // ZZJ TODO 这个还没看
                 moduleCallCommandUnblockedHandler(c);
             }
             continue;

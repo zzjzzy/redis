@@ -41,6 +41,7 @@ t_stream(4051行)
 看完t_系列后去看db.c和notify.c和networking.c
 
 ===== 其他 =====
+2026-03-29记录：下面的已经阶段性看完了一些，剩下的先不看了，后面再看源码基于某个功能去看，然后在看的过程中了解
 object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
@@ -59,7 +60,7 @@ syncio.c(145行) 已看完
 notify.c(145行) 已看完
 pubsub.c(754行) 待看  这个后续可以结合pub,sub命令怎么执行的来看
 timeout.c(202行) 已看完
-blocked.c(767行) 正在看，看到updateStatsOnUnblock
+blocked.c(767行) 这个没看完，先不看了
 monotonic.c(180行)
 latency.c(739行)
 rax.c(基数树，STREAM 的核心)(1927行)
@@ -70,6 +71,7 @@ rdb.c(3722行)
 logreqres.c(315行) 已看完，reqresAppendResponse看的比较粗略
 tracking.c(660行) 待看
 module.c(13904行)
+slowlog.c(206行)
 
 ===== 废弃 =====
 zipmap.c 不用学
