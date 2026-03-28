@@ -45,7 +45,6 @@ t_stream(4051行)
 object.c 【Memory introspection】以上都看完了，其他部分等用到了再看。
 server.c dict(从【Hash table type implementation】到【int allPersistenceDisabled(void)】) 已看完
 server.h struct client 已看完，后面有用到啥字段再看就行
-server.c typedef struct RedisModuleType
 db.c(2560行) 已看完（db.c引用了很多其他xxx.c，有很多还没看，估计后面看的越来越多了，可能还会回头再重新看一遍db.c）
 evict.c(770行) 已看完，粗略看了下，很多细节没有研究，知道每个方法大概在干什么就够了，后面如果有必要再详细研究
 networking.c(4589行) 已粗略看完，看到processInlineBuffer，processInlineBuffer及之后粗略过了一遍，不细看了，后面哪里用到了再看（看完这个再会看一个比如t_string.c，看下addReply怎么用的）
