@@ -363,6 +363,7 @@ int getGenericCommand(client *c) {
 }
 
 void getCommand(client *c) {
+    printf("getCommand");
     getGenericCommand(c);
 }
 
