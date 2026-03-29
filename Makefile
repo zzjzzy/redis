@@ -8,4 +8,8 @@ default: all
 install:
 	cd src && $(MAKE) $@
 
+mydebug:
+	make clean
+	make CFLAGS="-g -O0" MALLOC=jemalloc
+
 .PHONY: install
