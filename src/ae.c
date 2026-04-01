@@ -416,7 +416,7 @@ int aeProcessEvents(aeEventLoop *eventLoop, int flags)
 
         for (j = 0; j < numevents; j++) {
             int fd = eventLoop->fired[j].fd;
-            // ZZJ TODO 这里有空再看下，eventLoop->events不是个数组吗，不应该用数组索引取值吗，为什么用fd取值，难道设计的就是fd当索引？
+            // 注意这里aeEventLoop.events保存fd时是用fd作为索引保存的
             aeFileEvent *fe = &eventLoop->events[fd];
             int mask = eventLoop->fired[j].mask;
             int fired = 0; /* Number of events fired for current fd. */

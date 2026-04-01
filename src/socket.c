@@ -208,7 +208,7 @@ static int connSocketRead(connection *conn, void *buf, size_t buf_len) {
     return ret;
 }
 
-// 已看
+// 已看，这个的用法以及调用来源看connSocketAcceptHandler即可
 static int connSocketAccept(connection *conn, ConnectionCallbackFunc accept_handler) {
     int ret = C_OK;
 
@@ -325,8 +325,9 @@ static void connSocketEventHandler(struct aeEventLoop *el, int fd, void *clientD
 // connSocketAcceptHandler会进行系统调用accept方法(anetTcpAccept)，然后调用acceptCommonHandler(networking.c)
 // acceptCommonHandler里会调用connAccept(conn, clientAcceptHandler)(connection.h)
 // connAccept会调用connection->type->accept(conn, accept_handler);
-// connection->type->accept就是上面的connSocketAccept(socket.c)实现，调用connSocketAccept时传的accept_handler是acceptCommonHandler(networking.c)传过来的
-// accept_handler具体实现是clientAcceptHandler(networking.c)
+// connection->type->accept就是上面的connSocketAccept(socket.c)实现，所以acceptCommonHandler(networking.c)兜兜转转又调用回了socket.c的connSocketAccept
+// 调用connSocketAccept时传的accept_handler是clientAcceptHandler(networking.c传过来的)
+// acceptCommonHandler里会创建client实例，表示一个client连接成功了，注意，是在创建client实例的时候会注册eventLoop事件，这里有点隐蔽
 static void connSocketAcceptHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
     int cport, cfd, max = MAX_ACCEPTS_PER_CALL;
     char cip[NET_IP_STR_LEN];

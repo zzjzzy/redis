@@ -102,9 +102,11 @@ typedef struct aeEventLoop {
     int setsize; /* max number of file descriptors tracked */
     long long timeEventNextId;
     aeFileEvent *events; /* Registered events */
+    // 通过epoll_wait拿到就绪的event后，会将state->events中就绪的event放到fired字段中(注意不是aeFileEvent *events字段)
     aeFiredEvent *fired; /* Fired events */
     aeTimeEvent *timeEventHead;
     int stop;
+    // 每个具体实现apidata不一样，需要看ae_xxx.c，比如ae_epoll.c
     void *apidata; /* This is used for polling API specific data */
     aeBeforeSleepProc *beforesleep;
     aeBeforeSleepProc *aftersleep;

@@ -137,7 +137,7 @@ dictResetIterator会dictResumeRehashing
 ```
 
 - redis为什么快？
-宏调用减少函数调用开销
+宏调用减少函数调用开销，宏调用还能避免参数解析，比如server.h中【#define serverLog(level, ...) do {...】
 分支预测
 
 - RDB文件是什么样的？
