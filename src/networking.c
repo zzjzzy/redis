@@ -2568,6 +2568,7 @@ int processPendingCommandAndInputBuffer(client *c) {
  * pending query buffer, already representing a full command, to process.
  * return C_ERR in case the client was freed during the processing */
 int processInputBuffer(client *c) {
+    printf("processInputBuffer called\n");
     /* Keep processing while there is something in the input buffer */
     while(c->qb_pos < sdslen(c->querybuf)) {
         /* Immediately abort if the client is in the middle of something. */
@@ -2600,6 +2601,7 @@ int processInputBuffer(client *c) {
         }
 
         if (c->reqtype == PROTO_REQ_INLINE) {
+            // 这个方法就是从c.querybuf中读取一条命令，设置到c.argv中
             if (processInlineBuffer(c) != C_OK) break;
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
             if (processMultibulkBuffer(c) != C_OK) break;
@@ -2664,6 +2666,7 @@ int processInputBuffer(client *c) {
 }
 
 void readQueryFromClient(connection *conn) {
+    printf("readQueryFromClient called\n");
     client *c = connGetPrivateData(conn);
     int nread, big_arg = 0;
     size_t qblen, readlen;
@@ -2716,8 +2719,11 @@ void readQueryFromClient(connection *conn) {
         /* Read as much as possible from the socket to save read(2) system calls. */
         readlen = sdsavail(c->querybuf);
     }
+    // 这里就是调用connSocketRead(socket.c)
     nread = connRead(c->conn, c->querybuf+qblen, readlen);
     if (nread == -1) {
+        // 根据connSocketRead的处理，如果是-1，并且发生了错误(errno!=EAGAIN & errno!=EINTR), 会执行conn->state = CONN_STATE_ERROR
+        // 所以这里就是判断conn.state就行，conn.state还是CONNECTED，就说明读取没有发生错误，只是没有数据
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
             return;
         } else {
@@ -2735,6 +2741,7 @@ void readQueryFromClient(connection *conn) {
         goto done;
     }
 
+    // 前面只是把数据读到了c->querybuf中，但是sds结构保存的len还是旧的，下面这个调用就是更新querybuf的len
     sdsIncrLen(c->querybuf,nread);
     qblen = sdslen(c->querybuf);
     if (c->querybuf_peak < qblen) c->querybuf_peak = qblen;

@@ -368,6 +368,13 @@ void getCommand(client *c) {
     getGenericCommand(c);
 }
 
+void myCmd(client *c) {
+    printf("mycmd called, server.stat_total_reads_processed: %lld\n", server.stat_total_reads_processed);
+    robj *o = createStringObject("mycmd reply", 11);
+    addReplyBulk(c, o);
+    decrRefCount(o);
+}
+
 /*
  * GETEX <key> [PERSIST][EX seconds][PX milliseconds][EXAT seconds-timestamp][PXAT milliseconds-timestamp]
  *
