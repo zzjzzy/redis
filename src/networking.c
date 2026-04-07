@@ -2568,7 +2568,7 @@ int processPendingCommandAndInputBuffer(client *c) {
  * pending query buffer, already representing a full command, to process.
  * return C_ERR in case the client was freed during the processing */
 int processInputBuffer(client *c) {
-    printf("processInputBuffer called\n");
+//    printf("processInputBuffer called\n");
     /* Keep processing while there is something in the input buffer */
     while(c->qb_pos < sdslen(c->querybuf)) {
         /* Immediately abort if the client is in the middle of something. */
@@ -2600,10 +2600,18 @@ int processInputBuffer(client *c) {
             }
         }
 
+        sds s = sdsempty();
+        s = sdscatrepr(s, c->querybuf, strlen(c->querybuf));
+//        printf("processInputBuffer c.querybuf is: %s\n", s);
+        sdsfree(s);
         if (c->reqtype == PROTO_REQ_INLINE) {
             // 这个方法就是从c.querybuf中读取一条命令，设置到c.argv中
+            printf("processInlineBuffer called");
             if (processInlineBuffer(c) != C_OK) break;
         } else if (c->reqtype == PROTO_REQ_MULTIBULK) {
+            // 注意，get aaa这种命令，会走到这个if分支，也就是c->querybuf[c->qb_pos] == '*'是成立的
+            // 因为get aaa实际收到的是*2\r\n$3\r\nget\r\n$4\r\naaaa\r\n
+//            printf("processMultibulkBuffer called");
             if (processMultibulkBuffer(c) != C_OK) break;
         } else {
             serverPanic("Unknown request type");
@@ -2666,7 +2674,7 @@ int processInputBuffer(client *c) {
 }
 
 void readQueryFromClient(connection *conn) {
-    printf("readQueryFromClient called\n");
+//    printf("readQueryFromClient called\n");
     client *c = connGetPrivateData(conn);
     int nread, big_arg = 0;
     size_t qblen, readlen;

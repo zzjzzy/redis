@@ -50,6 +50,10 @@ void epollDemo() {
 
 }
 
+void redisCliDemo() {
+
+}
+
 void main() {
     epollDemo();
 }

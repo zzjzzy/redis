@@ -12,4 +12,10 @@ mydebug:
 	make clean
 	make CFLAGS="-g -O0" MALLOC=jemalloc
 
+cli:
+	./src/redis-cli
+
+clis1:
+	./src/redis-cli -p 6380
+
 .PHONY: install
