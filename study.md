@@ -14,6 +14,9 @@ struct redisObject {
 };
 ```
 
+20260501
+最近在看slaveof执行流程，这个在语雀上记笔记呢，直接在语雀上看进度
+
 ## 进度 ！！！！quicklistNext的优化，在github上提个discussion
 main方法看到这里了initServerConfig();，目前看到这里暂停了，先看基础数据结构
 

@@ -103,12 +103,16 @@ static connection *connCreateAcceptedSocket(int fd, void *priv) {
 }
 
 // 已看，看明白了
+/**
+ * 这个方法会建立连接，并将联系fd等信息赋值到connection对象中，然后调用aeCreateFileEvent注册event loop事件
+ * */
 // eventLoop调用流程
 // server.c aeMain -> aeProcessEvents -> epoll_wait
 // epoll_wait拿到就绪事件后，会调用aeFileEvent.rfileProc或者wfileProc
 // rfileProc和wfileProc是aeCreateFileEvent注册的，也就是这个方法里，可以看到rfileProc和wfileProc都是ae_handler
 // 而ae_handler的实现是connSocketEventHandler
 // connSocketEventHandler会调用conn->read_handler处理，conn->read_handler怎么注册在networking.c搜索connSetReadHandler，这里不继续梳理了
+// 这里如果没看明白，可以再结合语雀的梳理看下
 static int connSocketConnect(connection *conn, const char *addr, int port, const char *src_addr,
         ConnectionCallbackFunc connect_handler) {
     // anetTcpNonBlockBestEffortBindConnect里面会调用connnet方法
