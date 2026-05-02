@@ -204,8 +204,33 @@ static ConnectionType CT_My = {
 };
 
 static void myConnectionHandler(connection *conn) {
-    printf("myConnectionHandler conn.state: %d\n", connGetState(conn));
+    /*
+     * 这里打印的连接状态是ConnectionState.CONN_STATE_CONNECTED
+     * 刚创建时，connection.state是没有赋值的，所以默认是0，什么时候state变成的CONN_STATE_CONNECTED的？
+     * 调用connSocketConnect(socket.c)建立连接是，会赋值conn->state = CONN_STATE_CONNECTING;
+     * 然后调用connSocketEventHandler(socket.c)时(也就是触发了epoll_wait后)，判断如果conn->state == CONN_STATE_CONNECTING，并且检查没有异常，
+     * 就会赋值conn->state = CONN_STATE_CONNECTED;
+     * 设置完CONN_STATE_CONNECTED，就会调用conn->conn_handler(conn);
+     * */
+    ConnectionState state = connGetState(conn);
+    printf("myConnectionHandler conn.state: %d\n", state);
+    void *pd = connGetPrivateData(conn);
+    printf("myConnectionHandler pd: %p\n", pd);
 }
+
+static void myConnReadHandler(connection *conn) {
+    void *pd = connGetPrivateData(conn);
+    // 这个日志先不打印了，因为可能会有readBuf是0的事件，频繁调用myConnReadHandler
+//    printf("myConnReadHandler pd: %p\n", pd);
+    // 可以调用connRead读取数据
+    char buf[1024];
+    int ret = connRead(conn, buf, 1024);
+    if (ret > 0) {
+        printf("myConnReadHandler ret: %d\n", ret);
+        printf("myConnReadHandler buf: %s\n", buf);
+    }
+}
+
 
 /**
  * 学习 redis 中 connection.h 相关 api
@@ -219,4 +244,10 @@ void myConnTest(void) {
     connection *conn = connCreate(connectionTypeTcp());
     // 第二步：建立连接
     connConnect(conn, "127.0.0.1", 8080, NULL, myConnectionHandler);
+    // 第三步：设置读回调
+    connSetReadHandler(conn, myConnReadHandler);
+    // 第四步：设置私有数据，目前没有需求，先留空
+    connSetPrivateData(conn, NULL);
+    // 第五步：发送数据，测试myConnReadHandler
+    connWrite(conn, "hello", 5);
 }
