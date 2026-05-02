@@ -23,7 +23,7 @@ void epollDemo() {
     ev.data.fd = listen_fd;
     epoll_ctl(epfd, EPOLL_CTL_ADD, listen_fd, &ev);
     printf("start sleep\n");
-    sleep(10);
+    sleep(1);
     printf("stop sleep\n");
     while (1) {
         int n = epoll_wait(epfd, events, 10, -1);

@@ -28,6 +28,7 @@
  */
 
 #include "server.h"
+#include "my/demo/demo.h"
 #include <math.h> /* isnan(), isinf() */
 
 /* Forward declarations */
@@ -370,6 +371,15 @@ void getCommand(client *c) {
 
 void myCmd(client *c) {
     printf("mycmd called, server.stat_total_reads_processed: %lld\n", server.stat_total_reads_processed);
+    robj *param = c->argv[1];
+    robj *decoded = getDecodedObject(param);
+    printf("param: [%s], len: %zu\n", (char *)decoded->ptr, sdslen(decoded->ptr));
+    if (strcasecmp((char *)decoded->ptr, "connTest") == 0) {
+        // 这里要加\n，不然有输出缓冲区，导致打印不出来
+        printf("connTest called\n");
+        myConnTest();
+    }
+    decrRefCount(decoded);  // 注意释放引用
     robj *o = createStringObject("mycmd reply", 11);
     addReplyBulk(c, o);
     decrRefCount(o);
