@@ -1865,6 +1865,8 @@ struct redisServer {
 
     /* Replication (master) */
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
+    // 保存master返回的replid，如果是+CONTINUE增量复制并且master返回了不同的replid，会将旧的replid保存在这里
+    // 下面的second_replid_offset同理，参考slaveTryPartialResynchronization(replicaion.c)
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
     long long master_repl_offset;   /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
@@ -1926,7 +1928,9 @@ struct redisServer {
     /* The following two fields is where we store master PSYNC replid/offset
      * while the PSYNC is in progress. At the end we'll copy the fields into
      * the server->master client structure. */
+    // 当前是slave，记录psync命令时，master返回的replid(参考slaveTryPartialResynchronization(replicaion.c))
     char master_replid[CONFIG_RUN_ID_SIZE+1];  /* Master PSYNC runid. */
+    // 当前是slave，记录psync命令时，master返回的的repl_offset(参考slaveTryPartialResynchronization(replicaion.c))
     long long master_initial_offset;           /* Master PSYNC offset. */
     int repl_slave_lazy_flush;          /* Lazy FLUSHALL before loading DB? */
     /* Synchronous replication. */

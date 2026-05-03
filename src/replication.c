@@ -2509,6 +2509,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
     connSetReadHandler(conn, NULL);
 
+    // 如果需要full resync，master返回+FULLRESYNC replid offset
     if (!strncmp(reply,"+FULLRESYNC",11)) {
         char *replid = NULL, *offset = NULL;
 
@@ -2516,6 +2517,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
          * and the replication offset. */
         replid = strchr(reply,' ');
         if (replid) {
+            // 此时replid指向的是空格，++后指向实际的replid
             replid++;
             offset = strchr(replid,' ');
             if (offset) offset++;
@@ -2558,6 +2560,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
+            // 如果master返回的relpid和记录的不一致
             if (strcmp(new,server.cached_master->replid)) {
                 /* Master ID changed. */
                 serverLog(LL_NOTICE,"Master replication ID changed to %s",new);
