@@ -2329,6 +2329,8 @@ char* sendCommandRaw(connection *conn, sds cmd) {
  *
  * The command returns an sds string representing the result of the
  * operation. On error the first byte is a "-".
+ *
+ * 注意这个方法会调用sendCommandRaw，而sendCommandRaw在无异常时返回的是NULL，所以可以通过NULL判断是否有异常
  */
 char *sendCommand(connection *conn, ...) {
     va_list ap;
@@ -2452,6 +2454,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
     /* Writing half */
     if (!read_reply) {
+        // 这个分支给master发送PSYNC命令
         /* Initially set master_initial_offset to -1 to mark the current
          * master replid and offset as not valid. Later if we'll be able to do
          * a FULL resync using the PSYNC command we'll set the offset at the
@@ -2478,6 +2481,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             reply = sendCommand(conn,"PSYNC",psync_replid,psync_offset,NULL);
         }
 
+        // 看sendCommand注释，返回NULL表示没有异常
         if (reply != NULL) {
             serverLog(LL_WARNING,"Unable to send PSYNC to master: %s",reply);
             sdsfree(reply);
@@ -2801,6 +2805,7 @@ void syncWithMaster(connection *conn) {
         }
         sdsfree(err);
         err = NULL;
+        // 注意这里没有return，所以收到CAPA_REPLY后，就会继续向后执行，所以REPL_STATE_SEND_PSYNC不需要读就绪事件触发，CAPA回复后即可触发
         server.repl_state = REPL_STATE_SEND_PSYNC;
     }
 
