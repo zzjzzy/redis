@@ -2836,7 +2836,7 @@ void syncWithMaster(connection *conn) {
     }
 
     psync_result = slaveTryPartialResynchronization(conn,1);
-    //f，说明master还没回复，下次回复时会触发读就绪事件，就能再次调用syncWithMaster了。
+    // 返回PSYNC_WAIT_REPLY，说明master还没回复，下次回复时会触发读就绪事件，就能再次调用syncWithMaster了。
     if (psync_result == PSYNC_WAIT_REPLY) return; /* Try again later... */
 
     /* Check the status of the planned failover. We expect PSYNC_CONTINUE,
