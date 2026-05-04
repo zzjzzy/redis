@@ -267,6 +267,7 @@ static inline ssize_t connSyncRead(connection *conn, char *ptr, ssize_t size, lo
     return conn->type->sync_read(conn, ptr, size, timeout);
 }
 
+// 读取一行，可以直接看syncReadLine(syncio.c)，这个方法读取后，将结果存入ptr中，并且会去掉\r\n，末尾是\0
 static inline ssize_t connSyncReadLine(connection *conn, char *ptr, ssize_t size, long long timeout) {
     return conn->type->sync_readline(conn, ptr, size, timeout);
 }

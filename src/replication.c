@@ -1883,6 +1883,9 @@ void readSyncBulkPayload(connection *conn) {
 
     /* If repl_transfer_size == -1 we still have to read the bulk length
      * from the master reply. */
+    /* repl_transfer_size=-1表示还没开始从master读数据，此时需要先读取bulk count，master会先发送需要发送的rdb文件大小，然后再发送rdb文件
+     * 可以看下syncWithMaster，这个方法里会把server.repl_transfer_size设置为-1
+     * */
     if (server.repl_transfer_size == -1) {
         nread = connSyncReadLine(conn,buf,1024,server.repl_syncio_timeout*1000);
         if (nread == -1) {
@@ -1928,6 +1931,7 @@ void readSyncBulkPayload(connection *conn) {
             memset(lastbytes,0,CONFIG_RUN_ID_SIZE);
             /* Set any repl_transfer_size to avoid entering this code path
              * at the next call. */
+            // 这个注释是说，设置为0，下次就不进入这个if分支，因为前面判断了if (server.repl_transfer_size == -1)
             server.repl_transfer_size = 0;
             serverLog(LL_NOTICE,
                 "MASTER <-> REPLICA sync: receiving streamed RDB from master with EOF %s",
@@ -2623,6 +2627,7 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
 
 /* This handler fires when the non blocking connect was able to
  * establish a connection with the master. */
+// 这个已看完，详细笔记见语雀
 void syncWithMaster(connection *conn) {
     char tmpfile[256], *err = NULL;
     int dfd = -1, maxtries = 5;

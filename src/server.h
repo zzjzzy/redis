@@ -1905,10 +1905,13 @@ struct redisServer {
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
     int repl_state;          /* Replication status if the instance is a slave */
+    // 需要从master同步的rdb大小，是整个rdb的大小，参考readSyncBulkPayload(replicaion.c)
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
+    // 已经从master同步的rdb大小，是已经读取的大小，参考readSyncBulkPayload(replicaion.c)
     off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
     off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
     connection *repl_transfer_s;     /* Slave -> Master SYNC connection */
+    // 复制需要使用到的临时文件(参考syncWithMaster(replication.c))
     int repl_transfer_fd;    /* Slave -> Master SYNC temp file descriptor */
     char *repl_transfer_tmpfile; /* Slave-> master SYNC temp file name */
     time_t repl_transfer_lastio; /* Unix time of the latest read, for timeout */
