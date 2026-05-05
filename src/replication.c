@@ -1975,12 +1975,17 @@ void readSyncBulkPayload(connection *conn) {
         int eof_reached = 0;
 
         if (usemark) {
+            // 这个分支就是判断是不是EOF了
             /* Update the last bytes array, and check if it matches our
              * delimiter. */
             if (nread >= CONFIG_RUN_ID_SIZE) {
+                // 这个if分支就是copy buf的后CONFIG_RUN_ID_SIZE字节到lastbytes中
                 memcpy(lastbytes,buf+nread-CONFIG_RUN_ID_SIZE,
                        CONFIG_RUN_ID_SIZE);
             } else {
+                // 这个分支，由于buf的长度小于CONFIG_RUN_ID_SIZE，需要做如下字节移动和复制
+                // [lastbytes+nread,lastbytes+CONFIG_RUN_ID_SIZE-1]的数据移动到lastbytes位置
+                // 这样[lastbytes+CONFIG_RUN_ID_SIZE-nread, lastbytes+CONFIG_RUN_ID_SIZE-1]的数据填充buf数据
                 int rem = CONFIG_RUN_ID_SIZE-nread;
                 memmove(lastbytes,lastbytes+nread,rem);
                 memcpy(lastbytes+rem,buf,nread);
@@ -2020,6 +2025,7 @@ void readSyncBulkPayload(connection *conn) {
         if (server.repl_transfer_read >=
             server.repl_transfer_last_fsync_off + REPL_MAX_WRITTEN_BEFORE_FSYNC)
         {
+            // 刷盘
             off_t sync_size = server.repl_transfer_read -
                               server.repl_transfer_last_fsync_off;
             rdb_fsync_range(server.repl_transfer_fd,
@@ -2050,6 +2056,10 @@ void readSyncBulkPayload(connection *conn) {
 
     /* We need to stop any AOF rewriting child before flushing and parsing
      * the RDB, otherwise we'll create a copy-on-write disaster. */
+    /* 走到这里说明是以下情况之一：
+     * 1. 无盘复制
+     * 2. 有盘复制：数据已经读完并存入到临时文件了
+     * */
     if (server.aof_state != AOF_OFF) stopAppendOnly();
     /* Also try to stop save RDB child before flushing and parsing the RDB:
      * 1. Ensure background save doesn't overwrite synced data after being loaded.
@@ -2067,6 +2077,8 @@ void readSyncBulkPayload(connection *conn) {
     }
 
     if (use_diskless_load && server.repl_diskless_load == REPL_DISKLESS_LOAD_SWAPDB) {
+        // 如果是无盘复制，并且是swapdb模式，先创建tempdb，不清空现有的数据，这样现有的数据还可以继续使用
+        // 可以看下后面asyncLoading = 1;这里的注释，有说明asyncLoading为1时，不会清空现有的数据，可以继续提供读服务。
         /* Initialize empty tempDb dictionaries. */
         diskless_load_tempDb = disklessLoadInitTempDb();
         temp_functions_lib_ctx = functionsLibCtxCreate();
@@ -2101,6 +2113,10 @@ void readSyncBulkPayload(connection *conn) {
              * It is enabled only on SWAPDB diskless replication when master replication ID hasn't changed,
              * because in that state the old content of the db represents a different point in time of the same
              * data set we're currently receiving from the master. */
+            /* 这个方法后面有个赋值replid的地方
+             * memcpy(server.replid,server.master->replid,sizeof(server.replid));
+             * 也就是在全量同步完成后，会赋值，表示后续有新增的同步都用这个replid了
+             * */
             if (memcmp(server.replid, server.master_replid, CONFIG_RUN_ID_SIZE) == 0) {
                 asyncLoading = 1;
             }

@@ -1600,7 +1600,9 @@ struct redisServer {
     dict *module_configs_queue; /* Dict that stores module configurations from .conf file until after modules are loaded during startup or arguments to loadex. */
     list *loadmodule_queue;     /* List of modules to load at startup. */
     int module_pipe[2];         /* Pipe used to awake the event loop by module threads. */
+    // 子进程id，比如rdb任务的子进程
     pid_t child_pid;            /* PID of current child */
+    // 子进程类型，比如RDB，类型定义搜索CHILD_TYPE_RDB(server.h)
     int child_type;             /* Type of current child */
     redisAtomic int module_gil_acquring; /* Indicates whether the GIL is being acquiring by the main thread. */
     /* Networking */
@@ -1901,6 +1903,8 @@ struct redisServer {
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
+    // 目前全局搜索【server.master =】，只有replication.c有赋值，所以这个字段是用于复制的
+    // slave在全量加载完来自master的rdb后，会创建这个client，这样后续master的实时通过发送命令同步数据，就是用的这个client
     client *master;     /* Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
@@ -1909,6 +1913,7 @@ struct redisServer {
     off_t repl_transfer_size; /* Size of RDB to read from master during sync. */
     // 已经从master同步的rdb大小，是已经读取的大小，参考readSyncBulkPayload(replicaion.c)
     off_t repl_transfer_read; /* Amount of RDB read from master during sync. */
+    // 最近一次刷盘的字节offset，根据这个判断是否需要刷盘，避免写磁盘缓冲区过大，参考readSyncBulkPayload(replicaion.c)
     off_t repl_transfer_last_fsync_off; /* Offset when we fsync-ed last time. */
     connection *repl_transfer_s;     /* Slave -> Master SYNC connection */
     // 复制需要使用到的临时文件(参考syncWithMaster(replication.c))
