@@ -939,6 +939,10 @@ int startBgsaveForReplication(int mincapa, int req) {
 /* SYNC and PSYNC command implementation. */
 void syncCommand(client *c) {
     /* ignore SYNC if already slave or in monitor mode */
+    /* 问：syncCommand不就是CLIENT_SLAVE发起的吗，为什么是CLIENT_SLAVE就不处理
+     * 答：后续代码处理时，会赋值c->flags |= CLIENT_SLAVE，所以如果已经是CLIENT_SLAVE了，说明下面代码已经执行过一次了，
+     * 当前client已经开始作为slave同步数据了，所以不需要再处理了，直接忽略sync或psync命令
+     */
     if (c->flags & CLIENT_SLAVE) return;
 
     /* Check if this is a failover request to a replica with the same replid and
@@ -948,6 +952,8 @@ void syncCommand(client *c) {
     {
         serverLog(LL_NOTICE, "Failover request received for replid %s.",
             (unsigned char *)c->argv[1]->ptr);
+        /* server.masterhost是在slave记录的，所以psync replid offset failover 这种命令是master向slave发的
+         * */
         if (!server.masterhost) {
             addReplyError(c, "PSYNC FAILOVER can't be sent to a master.");
             return;
@@ -995,6 +1001,7 @@ void syncCommand(client *c) {
         return;
     }
 
+    // 使用redis cli连接到redis server，执行psync aaa 123，就可以触发这个日志
     serverLog(LL_NOTICE,"Replica %s asks for synchronization",
         replicationGetSlaveName(c));
 
@@ -1034,6 +1041,7 @@ void syncCommand(client *c) {
         c->flags |= CLIENT_PRE_PSYNC;
     }
 
+    // 前面的masterTryPartialResynchronization是部分复制，如果部分复制失败或者不是PSYNC，则走全量复制。
     /* Full resynchronization. */
     server.stat_sync_full++;
 
@@ -1054,6 +1062,7 @@ void syncCommand(client *c) {
         changeReplicationId();
         clearReplicationId2();
         createReplicationBacklog();
+        // 执行redis cli后，输入sync(没有参数)命令，即可触发此日志
         serverLog(LL_NOTICE,"Replication backlog created, my new "
                             "replication IDs are '%s' and '%s'",
                             server.replid, server.replid2);
@@ -3086,6 +3095,10 @@ void replicationSetMaster(char *ip, int port) {
 }
 
 /* Cancel replication, setting the instance as a master itself. */
+/* 停止和master的复制
+ * 调用场景
+ * 1. syncCommand调用，当master发送psync replid offset failover时，会调用
+ * */
 void replicationUnsetMaster(void) {
     if (server.masterhost == NULL) return; /* Nothing to do. */
 

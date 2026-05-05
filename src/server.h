@@ -1603,6 +1603,7 @@ struct redisServer {
     // 子进程id，比如rdb任务的子进程
     pid_t child_pid;            /* PID of current child */
     // 子进程类型，比如RDB，类型定义搜索CHILD_TYPE_RDB(server.h)
+    // 当前server如果有fork子进程，子进程的信息会记录到child_xxx字段中
     int child_type;             /* Type of current child */
     redisAtomic int module_gil_acquring; /* Indicates whether the GIL is being acquiring by the main thread. */
     /* Networking */
@@ -1621,6 +1622,7 @@ struct redisServer {
     list *clients_to_close;     /* Clients to close asynchronously */
     list *clients_pending_write; /* There is to write or install handler. */
     list *clients_pending_read;  /* Client has pending read socket buffers. */
+    // 当前server有哪些slave, syncCommand(replication.c)有add这个list(listAddNodeTail(server.slaves,c);)
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client;     /* The client that triggered the command execution (External or AOF). */
     client *executing_client;   /* The client executing the current command (possibly script or module). */
@@ -1865,10 +1867,13 @@ struct redisServer {
     int shutdown_on_sigint;         /* Shutdown flags configured for SIGINT. */
     int shutdown_on_sigterm;        /* Shutdown flags configured for SIGTERM. */
 
+    /* 保存master返回的replid，如果是+CONTINUE增量复制并且master返回了不同的replid，会将旧的replid保存在这里
+     * 下面的second_replid_offset同理，参考slaveTryPartialResynchronization(replicaion.c)
+     * 注意master和slave都有使用replid，对于master，replid就是当前master复制要用的replid
+     * 遗留问题：多个slave同时连接master，master用一个replid吗？
+     * */
     /* Replication (master) */
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
-    // 保存master返回的replid，如果是+CONTINUE增量复制并且master返回了不同的replid，会将旧的replid保存在这里
-    // 下面的second_replid_offset同理，参考slaveTryPartialResynchronization(replicaion.c)
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
     long long master_repl_offset;   /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
@@ -1904,7 +1909,7 @@ struct redisServer {
     int masterport;                 /* Port of master */
     int repl_timeout;               /* Timeout after N seconds of master idle */
     // 目前全局搜索【server.master =】，只有replication.c有赋值，所以这个字段是用于复制的
-    // slave在全量加载完来自master的rdb后，会创建这个client，这样后续master的实时通过发送命令同步数据，就是用的这个client
+    // slave在全量加载完来自master的rdb后，会创建这个client，这样后续master通过发送命令实时同步数据，就是用的这个client
     client *master;     /* Client that is master for this slave */
     client *cached_master; /* Cached master to be reused for PSYNC. */
     int repl_syncio_timeout; /* Timeout for synchronous I/O calls */
