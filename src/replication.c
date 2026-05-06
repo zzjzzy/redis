@@ -682,6 +682,8 @@ long long addReplyReplicationBacklog(client *c, long long offset) {
     replBufBlock *o = listNodeValue(node);
     o->refcount++;
     c->ref_repl_buf_node = node;
+    // o->repl_offset记录的是当前block的第一个字节对应的整体offset是多少
+    // 所以用offset - o->repl_offset计算出来的就是当前block在哪个offset开始复制
     c->ref_block_pos = offset - o->repl_offset;
 
     return server.repl_backlog->histlen - skip;
@@ -715,6 +717,9 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
     char buf[128];
     int buflen;
 
+    /* 如果首次复制，redis cli打印的日志是PSYNC replied +FULLRESYNC e2e74af70145c450776b3f2c4faff60937da0939 0
+     * 所以这里的offset可以先理解为0
+    */
     slave->psync_initial_offset = offset;
     slave->replstate = SLAVE_STATE_WAIT_BGSAVE_END;
     /* We are going to accumulate the incremental changes for this
@@ -869,6 +874,7 @@ int startBgsaveForReplication(int mincapa, int req) {
     /* `SYNC` should have failed with error if we don't support socket and require a filter, assert this here */
     serverAssert(socket_target || !(req & SLAVE_REQ_RDB_MASK));
 
+    // 在redis cli执行psync就可以触发这个日志
     serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
         socket_target ? "replicas sockets" : "disk");
 
@@ -1052,6 +1058,7 @@ void syncCommand(client *c) {
         connDisableTcpNoDelay(c->conn); /* Non critical if it fails. */
     c->repldbfd = -1;
     c->flags |= CLIENT_SLAVE;
+    // 将client添加到server.slaves链表中，这样就知道有哪些slave了
     listAddNodeTail(server.slaves,c);
 
     /* Create the replication backlog if needed. */
@@ -1098,7 +1105,11 @@ void syncCommand(client *c) {
              * another slave. Set the right state, and copy the buffer.
              * We don't copy buffer if clients don't want. */
             if (!(c->flags & CLIENT_REPL_RDBONLY))
+                // 这个是由于rdb正在进行中，所以slave这个client记录的复制ref_repl_buf_node和ref_block_pos都还没开始同步
+                // 所以可以直接将slave的信息复制到c中。
+                // ZZJ TODO，有没有可能，在执行到这个代码的时候，正好rdb完成了，slave中的repl相关信息已经开始更新了
                 copyReplicaOutputBuffer(c,slave);
+            // 注意这个方法只在有bgsave子进程执行中才会调用
             replicationSetupSlaveForFullResync(c,slave->psync_initial_offset);
             serverLog(LL_NOTICE,"Waiting for end of BGSAVE for SYNC");
         } else {

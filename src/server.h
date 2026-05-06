@@ -961,7 +961,8 @@ typedef struct clientReplyBlock {
 
 /* Similar with 'clientReplyBlock', it is used for shared buffers between
  * all replica clients and replication backlog. */
-// 已看，等看到复制的时候再详细研究
+/* 从这个注释就明白了，replBufBlock数组只有一个，多个slave共享，通过refcount表示当前这个block是否有被使用，没有被使用的会被清理
+ * */
 typedef struct replBufBlock {
     int refcount;           /* Number of replicas or repl backlog using. */
     long long id;           /* The unique incremental number. */
@@ -1126,10 +1127,16 @@ typedef struct replBacklog {
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
     size_t unindexed_count;      /* The count from last creating index block. */
+    /*
+     * 这个应该这么理解，首先由于数据被记录在ref_repl_buf_node的数组中，我想找某个offset的数据在哪个数组中，正常是应该遍历数组
+     * 但是有了这个ref_repl_buf_node，就可以记录offset和数组的映射关系，这样就可以更快的根据offset定位到ref_repl_buf_node对应的block
+     * */
     rax *blocks_index;           /* The index of recorded blocks of replication
                                   * buffer for quickly searching replication
                                   * offset on partial resynchronization. */
     long long histlen;           /* Backlog actual data length */
+    // master复制完所有slave后，offset也会前移，这个就是记录的master在ref_repl_buf_node中的offset
+    // 这个offset之前的数据都已经被复制到所有slave了 TODO 目前猜测，待确认
     long long offset;            /* Replication "master offset" of first
                                   * byte in the replication backlog buffer.*/
 } replBacklog;
@@ -1277,6 +1284,7 @@ typedef struct client {
     clientMemUsageBucket *mem_usage_bucket;
 
     // 这个listNode的val类型是replBufBlock，表示当前发送到哪个node了，用于CLIENT_TYPE_SLAVE
+    // 参考replBackLog中的ref_repl_buf_node
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
     // 这个字段对应上面的ref_repl_buf_node，表示已经发送的字节数
