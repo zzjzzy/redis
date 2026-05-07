@@ -54,8 +54,19 @@ void redisCliDemo() {
 
 }
 
+void forkDemo() {
+    printf("start fork\n");
+    int pid = fork();
+    if (pid == 0) {
+        printf("child process\n");
+    } else {
+        printf("parent process\n");
+    }
+}
+
 void main() {
-    epollDemo();
+//    epollDemo();
+    forkDemo();
 }
 
 

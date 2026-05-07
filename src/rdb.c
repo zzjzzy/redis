@@ -3657,6 +3657,7 @@ void bgsaveCommand(client *c) {
         addReplyError(c,"Background save already in progress");
     } else if (hasActiveChildProcess() || server.in_exec) {
         if (schedule || server.in_exec) {
+            // 这个值在serverCron有使用，所以这里设置为1后，会有定时任务判断这个值，决定是否执行bgsave
             server.rdb_bgsave_scheduled = 1;
             addReplyStatus(c,"Background saving scheduled");
         } else {
@@ -3681,6 +3682,9 @@ void bgsaveCommand(client *c) {
  * pointer if the instance has a valid master client, otherwise NULL
  * is returned, and the RDB saving will not persist any replication related
  * information. */
+/* 从上面注释可以知道, rdbSaveInfo主要是用来保存复制信息的，这个方法主要赋值了repl_stream_db
+ * 这样后续加载rdb的时候，复制信息也可以正确加载
+ * */
 rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi) {
     rdbSaveInfo rsi_init = RDB_SAVE_INFO_INIT;
     *rsi = rsi_init;
