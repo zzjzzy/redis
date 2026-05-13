@@ -3683,6 +3683,7 @@ void bgsaveCommand(client *c) {
  * is returned, and the RDB saving will not persist any replication related
  * information. */
 /* 从上面注释可以知道, rdbSaveInfo主要是用来保存复制信息的，这个方法主要赋值了repl_stream_db
+ * rdbSaveInfo会被保存到rdb文件中
  * 这样后续加载rdb的时候，复制信息也可以正确加载
  * */
 rdbSaveInfo *rdbPopulateSaveInfo(rdbSaveInfo *rsi) {

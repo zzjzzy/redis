@@ -870,11 +870,15 @@ int startBgsaveForReplication(int mincapa, int req) {
     /* We use a socket target if slave can handle the EOF marker and we're configured to do diskless syncs.
      * Note that in case we're creating a "filtered" RDB (functions-only, for example) we also force socket replication
      * to avoid overwriting the snapshot RDB file with filtered data. */
+    // SLAVE_REQ_RDB_MASK表示rdb文件有过滤，rdb不是完整的数据，看下SLAVE_REQ_RDB_MASK注释
+    // 如果是SLAVE_REQ_RDB_MASK或者是无盘复制，slave必须支持EOF复制
+    // 是否是无盘复制是通过配置文件配置的，和是否采用EOF没关系。但是无盘复制必须支持EOF，因为这种情况应该是rdb文件直接发给socket，不会保存rdb文件
+    // 这种情况是不知道rdb文件大小的。有盘复制应该是既可以采用EOF，也可以不采用EOF
     socket_target = (server.repl_diskless_sync || req & SLAVE_REQ_RDB_MASK) && (mincapa & SLAVE_CAPA_EOF);
     /* `SYNC` should have failed with error if we don't support socket and require a filter, assert this here */
     serverAssert(socket_target || !(req & SLAVE_REQ_RDB_MASK));
 
-    // 在redis cli执行psync就可以触发这个日志
+    // 在redis cli执行psync就可以触发master打印这个日志
     serverLog(LL_NOTICE,"Starting BGSAVE for SYNC with target: %s",
         socket_target ? "replicas sockets" : "disk");
 

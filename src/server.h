@@ -1631,6 +1631,7 @@ struct redisServer {
     list *clients_pending_write; /* There is to write or install handler. */
     list *clients_pending_read;  /* Client has pending read socket buffers. */
     // 当前server有哪些slave, syncCommand(replication.c)有add这个list(listAddNodeTail(server.slaves,c);)
+    // 这个list的类型是client*
     list *slaves, *monitors;    /* List of slaves and MONITORs */
     client *current_client;     /* The client that triggered the command execution (External or AOF). */
     client *executing_client;   /* The client executing the current command (possibly script or module). */
@@ -1901,6 +1902,7 @@ struct redisServer {
     int repl_min_slaves_to_write;   /* Min number of slaves to write. */
     int repl_min_slaves_max_lag;    /* Max lag of <count> slaves to write. */
     int repl_good_slaves_count;     /* Number of slaves with lag <= max_lag. */
+    // 这个值是通过配置文件配置的，可以看下redis.conf的repl-diskless-sync配置项说明了解更多
     int repl_diskless_sync;         /* Master send RDB to slaves sockets directly. */
     int repl_diskless_load;         /* Slave parse RDB directly from the socket.
                                      * see REPL_DISKLESS_LOAD_* enum */
