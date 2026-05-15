@@ -672,6 +672,9 @@ typedef enum {
 /* Using the following macro you can run code inside serverCron() with the
  * specified period, specified in milliseconds.
  * The actual resolution depends on server.hz. */
+// _ms_表示期望多少毫秒执行一次，1000/server.hz表示实际多少毫秒执行一次，相除就是表示定时器执行多少次后，可以执行我这个任务。
+// server.cronloops表示定时器已经执行多少次了，取余等于0就是表示可以执行了
+// 比如1000/server.hz=100ms，我期望500ms执行一次，也就是定时器执行5次后可以执行我这个任务了，那就是server.cronloops=5、10、15...时会执行。
 #define run_with_period(_ms_) if (((_ms_) <= 1000/server.hz) || !(server.cronloops%((_ms_)/(1000/server.hz))))
 
 /* We can print the stacktrace, so our assert is defined this way: */
@@ -1568,11 +1571,13 @@ struct redisServer {
     char *configfile;           /* Absolute config file path, or NULL */
     char *executable;           /* Absolute executable file path. */
     char **exec_argv;           /* Executable argv vector (copy). */
+    // dynamic_hz和config_hz可以直接看下redis.conf注释
     int dynamic_hz;             /* Change hz value depending on # of clients. */
     int config_hz;              /* Configured HZ value. May be different than
                                    the actual 'hz' field value if dynamic-hz
                                    is enabled. */
     mode_t umask;               /* The umask value of the process on startup */
+    // 详细信息可以看下redis.conf中hz的注释（可以搜索hz 10）
     int hz;                     /* serverCron() calls frequency in hertz */
     int in_fork_child;          /* indication that this is a fork child */
     redisDb *db;
