@@ -141,6 +141,7 @@ void expireScanCallback(void *privdata, const dictEntry *const_de) {
 }
 
 // 已看，一些细节没研究，目前知道这个方法干什么的就行
+// 在serverCron通过定时任务调用
 void activeExpireCycle(int type) {
     /* Adjust the running parameters according to the configured expire
      * effort. The default effort is 1, and the maximum configurable effort

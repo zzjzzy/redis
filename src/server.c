@@ -1289,7 +1289,8 @@ void cronUpdateMemoryStats(void) {
  * so in order to throttle execution of things we want to do less frequently
  * a macro is used: run_with_period(milliseconds) { .... }
  */
-
+// 返回值表示期望下一次执行的时间间隔，会用来更新te.when
+// te->when = now + (monotime)retval * 1000;
 int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
     int j;
     UNUSED(eventLoop);
@@ -1300,9 +1301,11 @@ int serverCron(struct aeEventLoop *eventLoop, long long id, void *clientData) {
      * handler if we don't return here fast enough. */
     if (server.watchdog_period) watchdogScheduleSignal(server.watchdog_period);
 
+    // 注意redis.conf中的配置项名称是hz，但是赋值给的是config_hz，可以看下config.c
     server.hz = server.config_hz;
     /* Adapt the server.hz value to the number of configured clients. If we have
      * many clients, we want to call serverCron() with an higher frequency. */
+    // 注意serverCron是会定时调用的，所以这个dynamic_hz就可以在每次定时调用时动态调整了
     if (server.dynamic_hz) {
         while (listLength(server.clients) / server.hz >
                MAX_CLIENTS_PER_CLOCK_TICK)
@@ -2748,6 +2751,7 @@ void initServer(void) {
     /* Create the timer callback, this is our way to process many background
      * operations incrementally, like clients timeout, eviction of unaccessed
      * expired keys and so forth. */
+    // 第2个参数表示1ms后就会执行serverCron，相当于服务刚启动，就会马上执行serverCron
     if (aeCreateTimeEvent(server.el, 1, serverCron, NULL, NULL) == AE_ERR) {
         serverPanic("Can't create event loop timers.");
         exit(1);

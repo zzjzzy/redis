@@ -85,7 +85,8 @@ unsigned int getLRUClock(void) {
 unsigned int LRU_CLOCK(void) {
     unsigned int lruclock;
     // LRU_CLOCK_RESOLUTION=1000，server.hz>=1就满足这个if条件
-    // ZZJ TODO 这里的server.hz怎么赋值的待研究
+    // server.hz代表了定时任务执行的频率，1000/server.hz就是每次定时任务执行的间隔时间(ms)
+    // serverCron方法会定时设置server.lruclock;
     if (1000/server.hz <= LRU_CLOCK_RESOLUTION) {
         // 使用提前获取的lruclock，这样就不用进行系统调用获取时间了
         lruclock = server.lruclock;

@@ -1922,6 +1922,7 @@ struct redisServer {
     sds masterauth;                 /* AUTH with this password with master */
     char *masterhost;               /* Hostname of master */
     int masterport;                 /* Port of master */
+    // replicationCron有用到，如果repl_timeout时间还没和master建立连接成功，就取消连接重新连接。
     int repl_timeout;               /* Timeout after N seconds of master idle */
     // 目前全局搜索【server.master =】，只有replication.c有赋值，所以这个字段是用于复制的
     // slave在全量加载完来自master的rdb后，会创建这个client，这样后续master通过发送命令实时同步数据，就是用的这个client

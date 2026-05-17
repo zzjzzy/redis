@@ -1435,6 +1435,7 @@ void sendBulkToSlave(connection *conn) {
     /* Before sending the RDB file, we send the preamble as configured by the
      * replication process. Currently the preamble is just the bulk count of
      * the file in the form "$<length>\r\n". */
+    // 这个值在updateSlavesWaitingBgsave有设置，就是设置的rdb文件的大小
     if (slave->replpreamble) {
         nwritten = connWrite(conn,slave->replpreamble,sdslen(slave->replpreamble));
         if (nwritten == -1) {
@@ -1690,6 +1691,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                 slave->repl_start_cmd_stream_on_ack = 1;
             } else {
                 if ((slave->repldbfd = open(server.rdb_filename,O_RDONLY)) == -1 ||
+                    // redis_fstat可以获取文件信息，包括文件大小buf.st_size就是文件大小
                     redis_fstat(slave->repldbfd,&buf) == -1) {
                     freeClientAsync(slave);
                     serverLog(LL_WARNING,"SYNC failed. Can't open/stat DB after BGSAVE: %s", strerror(errno));
@@ -3848,7 +3850,7 @@ void replicationCron(void) {
 
     /* Second, send a newline to all the slaves in pre-synchronization
      * stage, that is, slaves waiting for the master to create the RDB file.
-     *
+     * // ZZJ PRV2 多了个the
      * Also send the a newline to all the chained slaves we have, if we lost
      * connection from our master, to keep the slaves aware that their
      * master is online. This is needed since sub-slaves only receive proxied
