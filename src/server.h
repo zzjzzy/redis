@@ -1127,6 +1127,7 @@ typedef struct {
  * we use one rax tree to index some blocks every REPL_BACKLOG_INDEX_PER_BLOCKS
  * to make searching offset from replication buffer blocks list faster. */
 typedef struct replBacklog {
+    // node.value是replBufBlock
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
     size_t unindexed_count;      /* The count from last creating index block. */
@@ -1203,6 +1204,7 @@ typedef struct client {
     int reqtype;            /* Request protocol type: PROTO_REQ_* */
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
+    // _writevToClient有更新这里面的字段，可以看下_writevToClient了解字段的用法和含义
     list *reply;            /* List of reply objects to send to the client. */
     // 已看，_addReplyProtoToList有使用这个字段，c.reply中clientReplyBlock.size的大小总和
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
@@ -1295,10 +1297,19 @@ typedef struct client {
                                   * i.e. the next offset to send. */
 
     /* list node in clients_pending_write list */
+    // 这个值会在createClient的时候就设置
     listNode clients_pending_write_node;
     /* Response buffer */
     size_t buf_peak; /* Peak used size of buffer in last 5 sec interval. */
     mstime_t buf_peak_last_reset_time; /* keeps the last time the buffer peak value was reset */
+    /* c.buf, c.bufpos, c.sentlen梳理
+     * c.buf存了要发送给客户端的数据，c.bufpos表示现在的buf使用了多少字节了，c.sentlen表示已经发送了多少字节
+     * 所以关系如下
+     * c.buf-------c.sentlen--------c.bufpos
+     * [c.buf, c.buf+c.sentlen]是已经发送的，没用的数据了，要发送数据从c.buf+c.sentlen开始(所以_writevToClient中有设置iov[iovcnt].iov_base = c->buf + c->sentlen;)
+     * [c.buf+c.sentlen, c.buf+c.bufpos]是待发送数据（长度是c->bufpos - c->sentle，所以_writevToClient中有设置iov[iovcnt].iov_len = c->bufpos - c->sentlen;）
+     * _writevToClient有更新buf相关字段，可以看_writevToClient了解
+     * */
     int bufpos;
     size_t buf_usable_size; /* Usable size of buffer. */
     char *buf;
@@ -1915,6 +1926,8 @@ struct redisServer {
     int repl_diskless_sync_max_replicas;/* Max replicas for diskless repl BGSAVE
                                          * delay (start sooner if they all connect). */
     size_t repl_buffer_mem;         /* The memory of replication buffer. */
+    // 给slave需要同步的数据(应该主要是写命令)写入到这里面，然后由writeToClient写给slave（写入时机在语雀梳理了）
+    // 类型是replBufBlock，TODO ZZJ 和repl_backlog的区别
     list *repl_buffer_blocks;       /* Replication buffers blocks list
                                      * (serving replica clients and repl backlog) */
     /* Replication (slave) */

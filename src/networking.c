@@ -1860,7 +1860,9 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
     }
     /* The first node of reply list might be incomplete from the last call,
      * thus it needs to be calibrated to get the actual data address and length. */
-    // ZZJ TODO 这里没太看明白，c.bufpos不是代码c.buf的位置吗，为什么这个offset用于后面c.reply中的listNode了
+    // 待发送的数据会同时放到c.buf和c.reply中，如果c.buf中还有数据要发送，就说明reply中的数据都需要发送，所以offset设置为0
+    // 否则就设置为c.sentlen，这个c.sentlent表示是当前的buf已发送的长度，当前的buf可能是c.buf，也可能是c.reply[i].buf。
+    // 看下面对c.sentlen的更新可以看出来
     size_t offset = c->bufpos > 0 ? 0 : c->sentlen;
     listIter iter;
     listNode *next;
@@ -1879,6 +1881,7 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
         iov[iovcnt].iov_len = o->used - offset;
         // 每一个list分别放到iov[i]中
         iov_bytes_len += iov[iovcnt++].iov_len;
+        // reply第一个可能需要计算offset，list后面的肯定都还没发送，所以肯定是从offset=0开始发送
         offset = 0;
     }
     if (iovcnt == 0) return C_OK;
@@ -1893,6 +1896,7 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
         c->sentlen += remaining;
         /* If the buffer was sent, set bufpos to zero to continue with
          * the remainder of the reply. */
+        // 写入的长度比buf_len还大，说明c.buf中的数据已经发送完了，c.buf就可以清空了
         if (remaining >= buf_len) {
             c->bufpos = 0;
             c->sentlen = 0;
@@ -1903,6 +1907,8 @@ static int _writevToClient(client *c, ssize_t *nwritten) {
     while (remaining > 0) {
         next = listNext(&iter);
         o = listNodeValue(next);
+        // o->used - c->sentlen 和上面bufpos计算一样，代表还没发送的数据长度
+        // remaining小于o->used - c->sentlen，说明当前clinetReplyBlock的数据还没发送完，更新当前block的sentlen即可
         if (remaining < (ssize_t)(o->used - c->sentlen)) {
             c->sentlen += remaining;
             break;

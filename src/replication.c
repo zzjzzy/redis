@@ -258,6 +258,7 @@ void feedReplicationBufferWithObject(robj *o) {
  * clients disconnect, we need to free many replication buffer blocks that are
  * referenced. It would cost much time if there are a lots blocks to free, that
  * will freeze server, so we trim replication backlog incrementally. */
+// 在networking.c中_writeToClient会调用，也就是向slave写完数据后，会判断是不是需要trim server.repl_backlog
 void incrementalTrimReplicationBacklog(size_t max_blocks) {
     serverAssert(server.repl_backlog != NULL);
 
@@ -620,6 +621,9 @@ void replicationFeedMonitors(client *c, list *monitors, int dictid, robj **argv,
 
 /* Feed the slave 'c' with the replication backlog starting from the
  * specified 'offset' up to the end of the backlog. */
+// 如果slave发送psync，并且校验到满足部分复制条件(+CONTINUE)，会调用这个方法
+// 这个方法就是根据slave发过来的offset，从replbacklog中找到对应的replBufBlock，赋值给
+// slave client的ref_repl_buf_node和ref_block_pos
 long long addReplyReplicationBacklog(client *c, long long offset) {
     long long skip;
 
@@ -680,6 +684,7 @@ long long addReplyReplicationBacklog(client *c, long long offset) {
     prepareClientToWrite(c);
     /* Setting output buffer of the replica. */
     replBufBlock *o = listNodeValue(node);
+    // 当前的replBufBlock又有一个slave client要用，refcount+1
     o->refcount++;
     c->ref_repl_buf_node = node;
     // o->repl_offset记录的是当前block的第一个字节对应的整体offset是多少
@@ -1477,6 +1482,7 @@ void sendBulkToSlave(connection *conn) {
     atomicIncr(server.stat_net_repl_output_bytes, nwritten);
     if (slave->repldboff == slave->repldbsize) {
         closeRepldbfd(slave);
+        // 数据写完了，不需要写了，去掉写事件handler
         connSetWriteHandler(slave->conn,NULL);
         if (!replicaPutOnline(slave)) {
             freeClient(slave);
@@ -1704,6 +1710,7 @@ void updateSlavesWaitingBgsave(int bgsaveerr, int type) {
                     (unsigned long long) slave->repldbsize);
 
                 connSetWriteHandler(slave->conn,NULL);
+                // connSetWriteHandler的时候会更新mask，添加AE_WRITABLE，这个epoll就可以触发写事件了
                 if (connSetWriteHandler(slave->conn,sendBulkToSlave) == C_ERR) {
                     freeClientAsync(slave);
                     continue;
