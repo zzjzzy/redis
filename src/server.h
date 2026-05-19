@@ -969,6 +969,9 @@ typedef struct clientReplyBlock {
 typedef struct replBufBlock {
     int refcount;           /* Number of replicas or repl backlog using. */
     long long id;           /* The unique incremental number. */
+    // 当前block buf[0]对应的offset是多少，因为replBufBlock会存数组，每个replBufBlock代表了一定范围offset的数据
+    // 比如len(server.repl_buffer_blocks)=2, len(replBuffBlock.buf)=10, repl_buffer_blocks[0].repl_offset=0, repl_buffer_blocks[1].repl_offset=10
+    // 因为replBacklog要基于offset查询replBufBlock，所以需要这个offset
     long long repl_offset;  /* Start replication offset of the block. */
     size_t size, used;
     char buf[];
@@ -1910,6 +1913,7 @@ struct redisServer {
     int slaveseldb;                 /* Last SELECTed DB in replication output */
     int repl_ping_slave_period;     /* Master pings the slave every N seconds */
     replBacklog *repl_backlog;      /* Replication backlog for partial syncs */
+    // 这个就是个配置项
     long long repl_backlog_size;    /* Backlog circular buffer size */
     time_t repl_backlog_time_limit; /* Time without slaves after the backlog
                                        gets released. */
@@ -1925,6 +1929,7 @@ struct redisServer {
     int repl_diskless_sync_delay;   /* Delay to start a diskless repl BGSAVE. */
     int repl_diskless_sync_max_replicas;/* Max replicas for diskless repl BGSAVE
                                          * delay (start sooner if they all connect). */
+    // incrementalTrimReplicationBacklog有更新这个字段，可以看下了解下含义，大概就是repl_buffer缓冲区的内存大小
     size_t repl_buffer_mem;         /* The memory of replication buffer. */
     // 给slave需要同步的数据(应该主要是写命令)写入到这里面，然后由writeToClient写给slave（写入时机在语雀梳理了）
     // 类型是replBufBlock，TODO ZZJ 和repl_backlog的区别

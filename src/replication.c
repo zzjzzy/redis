@@ -259,10 +259,13 @@ void feedReplicationBufferWithObject(robj *o) {
  * referenced. It would cost much time if there are a lots blocks to free, that
  * will freeze server, so we trim replication backlog incrementally. */
 // 在networking.c中_writeToClient会调用，也就是向slave写完数据后，会判断是不是需要trim server.repl_backlog
+// 一次最多trim max_blocks个block，避免阻塞server
 void incrementalTrimReplicationBacklog(size_t max_blocks) {
     serverAssert(server.repl_backlog != NULL);
 
     size_t trimmed_blocks = 0;
+    // server.repl_backlog_size就是个配置项，控制replBuffer的总大小，
+    // 所以这里判断server.repl_backlog->histlen的长度小于了repl_backlog_size后，就无需再进入循环处理了
     while (server.repl_backlog->histlen > server.repl_backlog_size &&
            trimmed_blocks < max_blocks)
     {
@@ -276,8 +279,10 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
          * much as possible. So that backlog must be the last reference of
          * replication buffer blocks. */
         listNode *first = listFirst(server.repl_buffer_blocks);
+        // 说明server.repl_backlog.ref_repl_buf_node指向的就是server.repl_buffer_blocks的第一个元素
         serverAssert(first == server.repl_backlog->ref_repl_buf_node);
         replBufBlock *fo = listNodeValue(first);
+        // ZZJ TODO 为什么是1
         if (fo->refcount != 1) break;
 
         /* We don't try trim backlog if backlog valid size will be lessen than
@@ -288,11 +293,15 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
         /* Decr refcount and release the first block later. */
         fo->refcount--;
         trimmed_blocks++;
+        // 从这个跟新可以知道，repl_backlog.histlen记录的是server.repl_buffer_blocks所有relpBufBlock的used之和
+        // TODO ZZJ 注意应该是used之和，这个可以再确认下，只是对于当前需要删除的fo，fo.used=fo.size(后面代码有serverAssert)
         server.repl_backlog->histlen -= fo->size;
 
         /* Go to use next replication buffer block node. */
         listNode *next = listNextNode(first);
+        // 从这里可以看出，server.repl_backlog.ref_repl_buf_node指向的是server.repl_buffer_blocks的第一个元素
         server.repl_backlog->ref_repl_buf_node = next;
+        // 因为前面判断了如果server.repl_buffer_blocks是1，就不会处理，所以next一定不为NULL
         serverAssert(server.repl_backlog->ref_repl_buf_node != NULL);
         /* Incr reference count to keep the new head node. */
         ((replBufBlock *)listNodeValue(next))->refcount++;
@@ -310,6 +319,7 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
     }
 
     /* Set the offset of the first byte we have in the backlog. */
+    // TODO ZZJ 这个没明白
     server.repl_backlog->offset = server.master_repl_offset -
                               server.repl_backlog->histlen + 1;
 }
