@@ -967,12 +967,15 @@ typedef struct clientReplyBlock {
 /* 从这个注释就明白了，replBufBlock数组只有一个，多个slave共享，通过refcount表示当前这个block是否有被使用，没有被使用的会被清理
  * */
 typedef struct replBufBlock {
+    // 从feedReplicationBuffer方法可以看出，初始创建时refcount=0
     int refcount;           /* Number of replicas or repl backlog using. */
     long long id;           /* The unique incremental number. */
     // 当前block buf[0]对应的offset是多少，因为replBufBlock会存数组，每个replBufBlock代表了一定范围offset的数据
     // 比如len(server.repl_buffer_blocks)=2, len(replBuffBlock.buf)=10, repl_buffer_blocks[0].repl_offset=0, repl_buffer_blocks[1].repl_offset=10
     // 因为replBacklog要基于offset查询replBufBlock，所以需要这个offset
+    // 从feedReplicationBuffer方法可以看出，这个值赋值的是server.master_repl_offset+1
     long long repl_offset;  /* Start replication offset of the block. */
+    // size: buf的总长度，used：buf已使用长度
     size_t size, used;
     char buf[];
 } replBufBlock;
@@ -1131,6 +1134,7 @@ typedef struct {
  * to make searching offset from replication buffer blocks list faster. */
 typedef struct replBacklog {
     // node.value是replBufBlock
+    // feedReplicationBuffer有更新这个字段，赋值的是server.repl_buffer_blocks的第一个元素
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
     size_t unindexed_count;      /* The count from last creating index block. */
@@ -1647,6 +1651,7 @@ struct redisServer {
     connListener clistener;     /* Cluster bus listener */
     list *clients;              /* List of active clients */
     list *clients_to_close;     /* Clients to close asynchronously */
+    // putClientInPendingWriteQueue方法会设置这个值
     list *clients_pending_write; /* There is to write or install handler. */
     list *clients_pending_read;  /* Client has pending read socket buffers. */
     // 当前server有哪些slave, syncCommand(replication.c)有add这个list(listAddNodeTail(server.slaves,c);)
@@ -1903,6 +1908,8 @@ struct redisServer {
     /* Replication (master) */
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
+    // feedReplicationBuffer有段代码tail->repl_offset = server.master_repl_offset + 1;
+    // 可知，master_repl_offset代表的是repl_buffer_blocks中所有replBufBlock.buf的size大小？TODO
     long long master_repl_offset;   /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
     redisAtomic long long fsynced_reploff_pending;/* Largest replication offset to
@@ -1930,6 +1937,7 @@ struct redisServer {
     int repl_diskless_sync_max_replicas;/* Max replicas for diskless repl BGSAVE
                                          * delay (start sooner if they all connect). */
     // incrementalTrimReplicationBacklog有更新这个字段，可以看下了解下含义，大概就是repl_buffer缓冲区的内存大小
+    // feedReplicationBuffer也有更新这个字段
     size_t repl_buffer_mem;         /* The memory of replication buffer. */
     // 给slave需要同步的数据(应该主要是写命令)写入到这里面，然后由writeToClient写给slave（写入时机在语雀梳理了）
     // 类型是replBufBlock，TODO ZZJ 和repl_backlog的区别

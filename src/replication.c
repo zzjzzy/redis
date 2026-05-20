@@ -229,6 +229,7 @@ int prepareReplicasToWrite(void) {
     while((ln = listNext(&li))) {
         client *slave = ln->value;
         if (!canFeedReplicaReplBuffer(slave)) continue;
+        // 这个方法会把client放到server.clients_pending_write中
         if (prepareClientToWrite(slave) == C_ERR) continue;
         prepared++;
     }
@@ -369,6 +370,7 @@ void feedReplicationBuffer(char *s, size_t len) {
             server.master_repl_offset += copy;
             server.repl_backlog->histlen += copy;
         }
+        // 如果len>0，说明上面copy到tail时没copy完，还有剩余
         if (len) {
             /* Create a new node, make sure it is allocated to at
              * least PROTO_REPLY_CHUNK_BYTES */
@@ -421,6 +423,8 @@ void feedReplicationBuffer(char *s, size_t len) {
         }
 
         /* For replication backlog */
+        // 注意，虽然前端start_node赋值的是listLast，但是如果ref_repl_buf_node==NULL，说明之前还没建过repl_buffer_blocks
+        // 所以这里其实赋值的就是repl_buffer_blocks的第一个元素
         if (server.repl_backlog->ref_repl_buf_node == NULL) {
             server.repl_backlog->ref_repl_buf_node = start_node;
             /* Only increase the start block reference count. */
@@ -469,6 +473,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         /* We increment the repl_offset anyway, since we use that for tracking AOF fsyncs
          * even when there's no replication active. This code will not be reached if AOF
          * is also disabled. */
+        // TODO 这个还没明白
         server.master_repl_offset += 1;
         return;
     }
@@ -521,6 +526,7 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         /* We need to feed the buffer with the object as a bulk reply
          * not just as a plain string, so create the $..CRLF payload len
          * and add the final CRLF */
+        // 注意这里是复用了aux，也就是把上面aux=[*4\r\n]的内容给覆盖了
         aux[0] = '$';
         len = ll2string(aux+1,sizeof(aux)-1,objlen);
         aux[len+1] = '\r';

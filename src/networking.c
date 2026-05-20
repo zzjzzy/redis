@@ -264,6 +264,8 @@ void putClientInPendingWriteQueue(client *c) {
          * loop, we can try to directly write to the client sockets avoiding
          * a system call. We'll only really install the write handler if
          * we'll not be able to write the whole reply at once. */
+        // clients_pending_write会在handleClientsWithPendingWrites的时候使用，handleClientsWithPendingWrites又是beforeSleep会调用
+        // 也就是每次进入事件循环前，会检查是否有要写的client，有的话就写一下。
         c->flags |= CLIENT_PENDING_WRITE;
         listLinkNodeHead(server.clients_pending_write, &c->clients_pending_write_node);
     }
