@@ -283,11 +283,14 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
         // 说明server.repl_backlog.ref_repl_buf_node指向的就是server.repl_buffer_blocks的第一个元素
         serverAssert(first == server.repl_backlog->ref_repl_buf_node);
         replBufBlock *fo = listNodeValue(first);
-        // ZZJ TODO 为什么是1
+        // 为什么是1？feedReplicationBuffer有段代码，会更新server.repl_backlog.ref_repl_buf_node的refcount++
+        // 也就是repl_buffer_blocks的第一个元素在没有其他slave引用的情况下，refcount应该是1
         if (fo->refcount != 1) break;
 
         /* We don't try trim backlog if backlog valid size will be lessen than
          * setting backlog size once we release the first repl buffer block. */
+        // 上面注释的意思是说，如果把first node trim后，总长度小于了repl_backlog_size，就不trim
+        // 从这个减法也能看出来，repl_backlog.histlen表示的就是server.repl_buffer_blocks的replBufBlock.size的总长度
         if (server.repl_backlog->histlen - (long long)fo->size <=
             server.repl_backlog_size) break;
 
@@ -295,7 +298,7 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
         fo->refcount--;
         trimmed_blocks++;
         // 从这个跟新可以知道，repl_backlog.histlen记录的是server.repl_buffer_blocks所有relpBufBlock的used之和
-        // TODO ZZJ 注意应该是used之和，这个可以再确认下，只是对于当前需要删除的fo，fo.used=fo.size(后面代码有serverAssert)
+        // 注意repl_backlog.histlen其实是used之和(可以看下feedReplicationBuffer更新histlen的代码)，只是对于当前需要删除的fo，fo.used=fo.size(后面代码有serverAssert)
         server.repl_backlog->histlen -= fo->size;
 
         /* Go to use next replication buffer block node. */
@@ -305,6 +308,7 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
         // 因为前面判断了如果server.repl_buffer_blocks是1，就不会处理，所以next一定不为NULL
         serverAssert(server.repl_backlog->ref_repl_buf_node != NULL);
         /* Incr reference count to keep the new head node. */
+        // next被repl_backlog.ref_repl_buf_node引用了，所以refcount++，这也得出一个结论，server.repl_buffer_blocks的第一个元素的refcount至少为1
         ((replBufBlock *)listNodeValue(next))->refcount++;
 
         /* Remove the node in recorded blocks. */
@@ -320,7 +324,16 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
     }
 
     /* Set the offset of the first byte we have in the backlog. */
-    // TODO ZZJ 这个没明白
+    // 这个方法不会更新server.master_repl_offset，但是前面更新了repl_backlog.histlen
+    // 说明server.master_repl_offset会持续增长，代表从复制开启的那一刻，复制缓冲区累计的长度
+    // 而repl_backlog.histlen代表的是当前server.repl_buffer_blocks.buf.used的总长度
+    // 如果repl_buffer_blocks有trim，histlen是会减少的
+    /* 这么梳理后，下面的等式就好理解了，repl_backlog.offset代表的是repl_backlog.ref_repl_buf_block(也就是server.repl_buffer_blocks的第一个元素)
+     * 相对于起始复制时的offset
+     * 比如总共复制过1000数据了(master_repl_offset=1000)，histlen=900(replBufBlock.size=100，第一个replBufBlock被trim)
+     * 那此时repl_backlog.offset=1000-900+1=101
+     * 不过，话说，这个offset不就是repl_backlog.ref_repl_buf_block的offset吗
+    */
     server.repl_backlog->offset = server.master_repl_offset -
                               server.repl_backlog->histlen + 1;
 }
@@ -343,6 +356,9 @@ void freeReplicaReferencedReplBuffer(client *replica) {
  * 'addReply*', 'feedReplicationBacklog' for replicas and replication backlog,
  * First we add buffer into global replication buffer block list, and then
  * update replica / replication-backlog referenced node and block position. */
+/*
+ * 此方法分几种情况：看语雀笔记
+ * */
 void feedReplicationBuffer(char *s, size_t len) {
     static long long repl_block_id = 0;
 
@@ -370,6 +386,7 @@ void feedReplicationBuffer(char *s, size_t len) {
             server.master_repl_offset += copy;
             server.repl_backlog->histlen += copy;
         }
+        // ZZJ PRV2 这里为什么不使用else，感觉使用else更好理解，每次循环处理一个node
         // 如果len>0，说明上面copy到tail时没copy完，还有剩余
         if (len) {
             /* Create a new node, make sure it is allocated to at
@@ -423,7 +440,7 @@ void feedReplicationBuffer(char *s, size_t len) {
         }
 
         /* For replication backlog */
-        // 注意，虽然前端start_node赋值的是listLast，但是如果ref_repl_buf_node==NULL，说明之前还没建过repl_buffer_blocks
+        // 注意，虽然前面start_node赋值的是listLast，但是如果ref_repl_buf_node==NULL，说明之前还没建过repl_buffer_blocks
         // 所以这里其实赋值的就是repl_buffer_blocks的第一个元素
         if (server.repl_backlog->ref_repl_buf_node == NULL) {
             server.repl_backlog->ref_repl_buf_node = start_node;

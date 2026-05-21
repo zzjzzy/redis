@@ -970,10 +970,11 @@ typedef struct replBufBlock {
     // 从feedReplicationBuffer方法可以看出，初始创建时refcount=0
     int refcount;           /* Number of replicas or repl backlog using. */
     long long id;           /* The unique incremental number. */
-    // 当前block buf[0]对应的offset是多少，因为replBufBlock会存数组，每个replBufBlock代表了一定范围offset的数据
-    // 比如len(server.repl_buffer_blocks)=2, len(replBuffBlock.buf)=10, repl_buffer_blocks[0].repl_offset=0, repl_buffer_blocks[1].repl_offset=10
+    // 当前block buf[0]对应的offset是多少，因为replBufBlock会存为数组(server.repl_buffer_blocks是replBufBlock数组)，
+    // 每个replBufBlock代表了一定范围offset的数据
+    // 比如len(server.repl_buffer_blocks)=2, len(replBuffBlock.buf)=10, repl_buffer_blocks[0].repl_offset=1, repl_buffer_blocks[1].repl_offset=11
     // 因为replBacklog要基于offset查询replBufBlock，所以需要这个offset
-    // 从feedReplicationBuffer方法可以看出，这个值赋值的是server.master_repl_offset+1
+    // 从feedReplicationBuffer方法可以看出，这个值赋值的是server.master_repl_offset+1，所以这个offset是从1开始的
     long long repl_offset;  /* Start replication offset of the block. */
     // size: buf的总长度，used：buf已使用长度
     size_t size, used;
@@ -1146,8 +1147,7 @@ typedef struct replBacklog {
                                   * buffer for quickly searching replication
                                   * offset on partial resynchronization. */
     long long histlen;           /* Backlog actual data length */
-    // master复制完所有slave后，offset也会前移，这个就是记录的master在ref_repl_buf_node中的offset
-    // 这个offset之前的数据都已经被复制到所有slave了 TODO 目前猜测，待确认
+    // 含义见incrementalTrimReplicationBacklog中的注释
     long long offset;            /* Replication "master offset" of first
                                   * byte in the replication backlog buffer.*/
 } replBacklog;
