@@ -332,7 +332,8 @@ void incrementalTrimReplicationBacklog(size_t max_blocks) {
      * 相对于起始复制时的offset
      * 比如总共复制过1000数据了(master_repl_offset=1000)，histlen=900(replBufBlock.size=100，第一个replBufBlock被trim)
      * 那此时repl_backlog.offset=1000-900+1=101
-     * 不过，话说，这个offset不就是repl_backlog.ref_repl_buf_block的offset吗
+     * 不过，话说，这个offset不就是repl_backlog.ref_repl_buf_block的offset吗，经过AI分析：是的
+     * 从这个等式也能知道，repl_backlog.offset和replBufBlock.repl_offset都是基于复制开始的offset，也就是和master_repl_offset是对齐的
     */
     server.repl_backlog->offset = server.master_repl_offset -
                               server.repl_backlog->histlen + 1;
