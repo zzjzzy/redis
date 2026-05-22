@@ -491,7 +491,19 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         /* We increment the repl_offset anyway, since we use that for tracking AOF fsyncs
          * even when there's no replication active. This code will not be reached if AOF
          * is also disabled. */
-        // TODO 这个还没明白
+        // 如果没有slave，把master_repl_offset也加一下，看注释是为了AOF用，这个后面再研究吧
+        // 从这里也能看出来，即使没有复制，master_repl_offset也会随着命令执行递增。只是这个增加每执行一个命令就加1，而不是加命令总字节数。
+        // 从上面注释可以知道，如果aof没开启，不会走到这个代码，亲测也是，如果aof关了，不会打印这个日志，打开就会打印
+        // aof关了，会打印这个日志：“server.also_propagate.numops == 0”（自己加的日志）
+        // server.c的call方法有这么一行代码if (dirty) propagate_flags |= (PROPAGATE_AOF|PROPAGATE_REPL);
+        // 所以如果slave propagate开启，aof也一定开启
+        // 后面shouldPropagate会先判断aof，如果aof开启，一定返回true，所以会出现以下情况
+        // case1: aof开启，没有slave，此时会走到这个代码
+        // case2: aof开启，有slave，会往下走，不会走到这个if
+        // case3: aof未开启，没有slave，不会走到这里，propagatePendingCommands直接返回了
+        // case4: aof未开启，有slave，不会走到这个if
+        // 所以能走到这个if表示aof开启了（case1）
+        serverLog(LL_NOTICE, "no slave, master_repl_offset+1");
         server.master_repl_offset += 1;
         return;
     }

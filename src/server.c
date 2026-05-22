@@ -3382,8 +3382,10 @@ void updateCommandLatencyHistogram(struct hdr_histogram **latency_histogram, int
  * multiple separated commands. Note that alsoPropagate() is not affected
  * by CLIENT_PREVENT_PROP flag. */
 static void propagatePendingCommands(void) {
-    if (server.also_propagate.numops == 0)
+    if (server.also_propagate.numops == 0) {
+        serverLog(LL_NOTICE, "server.also_propagate.numops == 0");
         return;
+    }
 
     int j;
     redisOp *rop;
@@ -3690,6 +3692,8 @@ void call(client *c, int flags) {
 
         /* Call alsoPropagate() only if at least one of AOF / replication
          * propagation is needed. */
+        // 从上面的赋值可以看出，propagate_flags注意是根据server.dirty来决定是否需要propagate的
+        // 而server.dirty在具体每个命令执行时会更新，比如setGenericCommand就有server.dirty++
         if (propagate_flags != PROPAGATE_NONE)
             alsoPropagate(c->db->id,c->argv,c->argc,propagate_flags);
     }

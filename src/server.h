@@ -1845,7 +1845,7 @@ struct redisServer {
                                         default no. (for testings). */
 
     /* RDB persistence */
-    // ZZJ TODO 看下这个dirty怎么用的，只看到各种地方在++
+    // server.c的call方法有使用，这个用来标记命令执行后，是否有数据变化，然后call方法根据这个判断是否需要传播命令给aof和slave
     long long dirty;                /* Changes to DB from the last save */
     long long dirty_before_bgsave;  /* Used to restore dirty on failed BGSAVE */
     long long rdb_last_load_keys_expired;  /* number of expired keys when loading RDB */
