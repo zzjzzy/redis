@@ -1243,6 +1243,7 @@ typedef struct client {
     long long psync_initial_offset; /* FULLRESYNC reply offset other slaves
                                        copying this slave output buffer
                                        should use. */
+    // 这个只有当前server是slave才会赋值，当前server是slave，这个client是master连过来的
     char replid[CONFIG_RUN_ID_SIZE+1]; /* Master replication ID (if master). */
     int slave_listening_port; /* As configured with: REPLCONF listening-port */
     char *slave_addr;       /* Optionally given by REPLCONF ip-address */
@@ -1297,6 +1298,7 @@ typedef struct client {
 
     // 这个listNode的val类型是replBufBlock，表示当前发送到哪个node了，用于CLIENT_TYPE_SLAVE
     // 参考replBackLog中的ref_repl_buf_node
+    // 当前server是master，这个client是连接的slave，会有这个值
     listNode *ref_repl_buf_node; /* Referenced node of replication buffer blocks,
                                   * see the definition of replBufBlock. */
     // 这个字段对应上面的ref_repl_buf_node，表示已经发送的字节数
