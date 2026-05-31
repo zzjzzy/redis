@@ -64,9 +64,14 @@ void forkDemo() {
     }
 }
 
+void threadDemo() {
+
+}
+
 void main() {
 //    epollDemo();
-    forkDemo();
+//    forkDemo();
+    threadDemo();
 }
 
 

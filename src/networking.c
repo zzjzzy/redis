@@ -439,8 +439,9 @@ void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
         return;
     }
 
-    // 先加个client.buf字段中，如果buf中放不下，就放到client.reply回复列表中
-    // ZZJ TODO 这里有个疑问，如果buf的数据被回复了，buf会被清空吗，如果清空了，新数据会被写入buf，那reply中的数据怎么办，新数据岂不是被放到了reply的旧数据的前面
+    // 先加到client.buf字段中，如果buf中放不下，就放到client.reply回复列表中
+    // 这里有个疑问，如果buf的数据被回复了，buf会被清空吗，如果清空了，新数据会被写入buf，那reply中的数据怎么办，新数据岂不是被放到了reply的旧数据的前面
+    // _addReplyToBuffer方法注释有答案，看下这行注释就明白了：If there already are en...
     size_t reply_len = _addReplyToBuffer(c,s,len);
     if (len > reply_len) _addReplyProtoToList(c,c->reply,s+reply_len,len-reply_len);
 }
@@ -4230,14 +4231,23 @@ typedef struct __attribute__((aligned(CACHE_LINE_SIZE))) threads_pending {
     redisAtomic unsigned long value;
 } threads_pending;
 
+// 这里面放的是pthread_t tid，也就是线程id
 pthread_t io_threads[IO_THREADS_MAX_NUM];
+// 这里面放的是线程锁对象，会有3个方法用到pthread_mutex_init、pthread_mutex_lock、pthread_mutex_unlock
 pthread_mutex_t io_threads_mutex[IO_THREADS_MAX_NUM];
+/**
+int count = listLength(io_threads_list[j]);
+setIOPendingCount(j, count);
+有这么两行代码，可知io_threads_pending[i]存的是io_threads_list[i]的list长度
+ TODO DISCUSSION 有疑问：为什么不直接从io_threads_list[i]获取长度，还要再存一份
+ * */
 threads_pending io_threads_pending[IO_THREADS_MAX_NUM];
 int io_threads_op;      /* IO_THREADS_OP_IDLE, IO_THREADS_OP_READ or IO_THREADS_OP_WRITE. */ // TODO: should access to this be atomic??!
 
 /* This is the list of clients each thread will serve when threaded I/O is
  * used. We spawn io_threads_num-1 threads, since one is the main thread
  * itself. */
+// io_threads_list[i]是个list，list里装的是client
 list *io_threads_list[IO_THREADS_MAX_NUM];
 
 static inline unsigned long getIOPendingCount(int i) {
@@ -4250,6 +4260,9 @@ static inline void setIOPendingCount(int i, unsigned long count) {
     atomicSetWithSync(io_threads_pending[i].value, count);
 }
 
+/*
+ *
+ * */
 void *IOThreadMain(void *myid) {
     /* The ID is the thread number (from 0 to server.io_threads_num-1), and is
      * used by the thread to just manipulate a single sub-array of clients. */
@@ -4263,6 +4276,7 @@ void *IOThreadMain(void *myid) {
 
     while(1) {
         /* Wait for start */
+        // ZZJ TODO 这里可以再研究下，为什么要先循环等待。
         for (int j = 0; j < 1000000; j++) {
             if (getIOPendingCount(id) != 0) break;
         }
@@ -4278,6 +4292,8 @@ void *IOThreadMain(void *myid) {
 
         /* Process: note that the main thread will never touch our list
          * before we drop the pending count to 0. */
+        // 上面这句话很关键，说明循环io_threads_list期间list数据不会变化，不会有并发问题。
+        // TODO 为什么，看下
         listIter li;
         listNode *ln;
         listRewind(io_threads_list[id],&li);
@@ -4349,6 +4365,9 @@ void killIOThreads(void) {
     }
 }
 
+/* startThreadedIO其实就是调用了pthread_mutex_unlock，因为在initThreadedIO时
+ * 加了锁，IOThreadMain在有个地方也会尝试加锁，因为initThreadedIO时主线程加个锁，所以IOThreadMain就会阻塞
+ * */
 void startThreadedIO(void) {
     serverAssert(server.io_threads_active == 0);
     for (int j = 1; j < server.io_threads_num; j++)
@@ -4356,6 +4375,7 @@ void startThreadedIO(void) {
     server.io_threads_active = 1;
 }
 
+// 调用pthread_mutex_lock抢到锁，这样IOThreadMain拿不到锁就会挂起
 void stopThreadedIO(void) {
     /* We may have still clients with pending reads when this function
      * is called: handle them before stopping the threads. */
@@ -4375,6 +4395,7 @@ void stopThreadedIO(void) {
  * The function returns 0 if the I/O threading should be used because there
  * are enough active threads, otherwise 1 is returned and the I/O threads
  * could be possibly stopped (if already active) as a side effect. */
+// 这个在serverCron有调用，也就是会有定时任务检查
 int stopThreadedIOIfNeeded(void) {
     int pending = listLength(server.clients_pending_write);
 
