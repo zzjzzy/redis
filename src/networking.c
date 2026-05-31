@@ -344,6 +344,9 @@ size_t _addReplyToBuffer(client *c, const char *s, size_t len) {
 
     /* If there already are entries in the reply list, we cannot
      * add anything more to the static buffer. */
+    // 如果c->reply还有值，就不能往c.buf写，不然顺序就乱了，必须只往后添加数据。
+    // 场景1：socket写数据时，只写了c.buf的部分数据，c.reply的还没写完
+    // 场景2：addReplyDeferredLen会创建一个value=NULL的c.reply节点，创建的时候可能c.buf还没写满。
     if (listLength(c->reply) > 0) return 0;
 
     size_t reply_len = len > available ? available : len;
@@ -365,6 +368,8 @@ void _addReplyProtoToList(client *c, list *reply_list, const char *s, size_t len
     /* Note that 'tail' may be NULL even if we have a tail node, because when
      * addReplyDeferredLen() is used, it sets a dummy node to NULL just
      * to fill it later, when the size of the bulk length is set. */
+    // 上面这个注释看过addReplyDeferredLen就明白了，c.reply的tail节点的value是有可能是NUL的。
+    // 如果是NULL,当前节点就不用,而是在后面再创建一个节点写入.
 
     /* Append to tail string when possible. */
     if (tail) {
@@ -422,7 +427,6 @@ void _addReplyToBufferOrList(client *c, const char *s, size_t len) {
 
     /* We call it here because this function may affect the reply
      * buffer offset (see function comment) */
-    // ZZJ TODO 这个还没看
     reqresSaveClientReplyOffset(c);
 
     /* If we're processing a push message into the current client (i.e. executing PUBLISH
@@ -773,14 +777,20 @@ void *addReplyDeferredLen(client *c) {
 
     /* We call it here because this function conceptually affects the reply
      * buffer offset (see function comment) */
-    // ZZJ TODO 这个还没看
+    // 已看，这个就是把一些offset信息保存到c.reqres中
     reqresSaveClientReplyOffset(c);
 
     trimReplyUnusedTailSpace(c);
+    // 先放一个value=NULL的list节点占位，这样后面调用setDeferredReply时就知道在哪里插入数据了。
     listAddNodeTail(c->reply,NULL); /* NULL is our placeholder. */
+    // 注意，listLast(c->reply);不是NULL，listLast(c->reply).value才是NULL
     return listLast(c->reply);
 }
 
+// 把需要延迟写入的输入写入对应位置，比如对于有些写入，会先写数据，再写协议前缀
+// 比如对于数组，可能先写数组，再写【*3\r\n】这种协议前缀
+// 这个方法就是把协议前缀写在合适的位置，一般调用这个方法前会先调用addReplyDeferredLen在c.reply插入一个value=NULL的节点，预留一个位置
+// 这个方法就是在之前预留的位置处写入协议前缀
 void setDeferredReply(client *c, void *node, const char *s, size_t length) {
     listNode *ln = (listNode*)node;
     clientReplyBlock *next, *prev;
@@ -874,6 +884,8 @@ void setDeferredAggregateLen(client *c, void *node, long length, char prefix) {
 }
 
 // 下面几个方法可以看出不同前缀分别代表了什么类型的返回数据
+// node: 要插入的c.reply的位置
+// length: 数组的长度，如果协议返回的是数组，协议头是*3\r\n，3表示数组长度，length就是用来写协议开头信息的
 void setDeferredArrayLen(client *c, void *node, long length) {
     setDeferredAggregateLen(c,node,length,'*');
 }
@@ -1152,6 +1164,7 @@ void addReplyVerbatim(client *c, const char *s, size_t len, const char *ext) {
  * is terminated by NULL sentinel. */
 void addReplyHelp(client *c, const char **help) {
     sds cmd = sdsnew((char*) c->argv[0]->ptr);
+    // 这里返回的是c.reply的最后一个node，注意blenp不是NULL，blenp.value是NULL
     void *blenp = addReplyDeferredLen(c);
     int blen = 0;
 
@@ -1160,6 +1173,8 @@ void addReplyHelp(client *c, const char **help) {
         "%s <subcommand> [<arg> [value] [opt] ...]. Subcommands are:",cmd);
     sdsfree(cmd);
 
+    // help数组最后一个元素必须是NULL，因为这里的while要靠这个结束循环
+    // addReplyStatus写入的内容：+xxxx\r\n
     while (help[blen]) addReplyStatus(c,help[blen++]);
 
     addReplyStatus(c,"HELP");
@@ -4293,7 +4308,10 @@ void *IOThreadMain(void *myid) {
         /* Process: note that the main thread will never touch our list
          * before we drop the pending count to 0. */
         // 上面这句话很关键，说明循环io_threads_list期间list数据不会变化，不会有并发问题。
-        // TODO 为什么，看下
+        // 这里的关键是handleClientsWithPendingWritesUsingThreads会先把clients转移到io_threads_list中
+        // 然后setIOPendingCount(j, count);，这样IOThreadMain就可以执行到这里的代码了
+        // 然后handleClientsWithPendingWritesUsingThreads中有一个while(1)循环，会判断getIOPendingCount(j)是否都为0了
+        // 也就是这里的代码是不是都执行完了，都执行完了才会向下执行，所以就不会有并发问题。
         listIter li;
         listNode *ln;
         listRewind(io_threads_list[id],&li);
@@ -4476,6 +4494,8 @@ int handleClientsWithPendingWritesUsingThreads(void) {
     listEmpty(io_threads_list[0]);
 
     /* Wait for all the other threads to end their work. */
+    // 从这里可以看出来，redis的异步写只是分发了多个线程并发去写，还是需要等所有线程写完。
+    // 之前还以为是分发给异步线程写之后，主线程就需要向下执行了，不管有没有写完。
     while(1) {
         unsigned long pending = 0;
         for (int j = 1; j < server.io_threads_num; j++)

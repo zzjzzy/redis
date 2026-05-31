@@ -5281,7 +5281,9 @@ void commandGetKeysCommand(client *c) {
 }
 
 /* COMMAND HELP */
+// redis-cli执行command help会走到这里
 void commandHelpCommand(client *c) {
+    printf("commandHelpCommand called\n");
     const char *help[] = {
 "(no subcommand)",
 "    Return details about all Redis commands.",

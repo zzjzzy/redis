@@ -1211,7 +1211,7 @@ typedef struct client {
     int reqtype;            /* Request protocol type: PROTO_REQ_* */
     int multibulklen;       /* Number of multi bulk arguments left to read. */
     long bulklen;           /* Length of bulk argument in multi bulk request. */
-    // _writevToClient有更新这里面的字段，可以看下_writevToClient了解字段的用法和含义
+    // _writevToClient有更新这里面的字段，可以看下_writevToClient了解字段的用法和含义，list里的数据类型是clientReplyBlock
     list *reply;            /* List of reply objects to send to the client. */
     // 已看，_addReplyProtoToList有使用这个字段，c.reply中clientReplyBlock.size的大小总和
     unsigned long long reply_bytes; /* Tot bytes of objects in reply list. */
