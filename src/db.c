@@ -808,6 +808,14 @@ void randomkeyCommand(client *c) {
     decrRefCount(key);
 }
 
+/* 从这个命令可以梳理清楚redis回复数组字符串的协议格式
+ * *2\r\n (2是数组元素个数)
+ * $3\r\n (3是字符串长度)
+ * abc\r\n
+ * $5\r\n
+ * abcde\r\n
+ * */
+
 void keysCommand(client *c) {
     dictIterator *di;
     dictEntry *de;

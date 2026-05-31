@@ -758,6 +758,7 @@ void trimReplyUnusedTailSpace(client *c) {
 
 /* Adds an empty object to the reply list that will contain the multi bulk
  * length, which is not known when this function is called. */
+// 在c.reply添加一个value=NULL的节点占位
 void *addReplyDeferredLen(client *c) {
     /* Note that we install the write event here even if the object is not
      * ready to be sent, since we are sure that before returning to the
