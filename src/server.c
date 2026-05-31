@@ -3383,7 +3383,7 @@ void updateCommandLatencyHistogram(struct hdr_histogram **latency_histogram, int
  * by CLIENT_PREVENT_PROP flag. */
 static void propagatePendingCommands(void) {
     if (server.also_propagate.numops == 0) {
-        serverLog(LL_NOTICE, "server.also_propagate.numops == 0");
+//        serverLog(LL_NOTICE, "server.also_propagate.numops == 0");
         return;
     }
 
