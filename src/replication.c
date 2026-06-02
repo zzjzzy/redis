@@ -836,6 +836,14 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
     /* We still have the data our slave is asking for? */
     if (!server.repl_backlog ||
         psync_offset < server.repl_backlog->offset ||
+        /* 从这个大于判断再次理解下offset和histlen的含义
+         * server.repl_backlog.offset等于server.repl_backlog.ref_repl_buf_node.repl_offset，其实也就是server.repl_buffer_blocks
+         * 第一个元素的offset，因为replBacklog会被trim，这个offset是会逐渐变大的，所以上面的小于判断，如果slave请求的offset小于repl_backlog.offset
+         * 由于之前的数据已经清理了，slave请求的offset是无效的。
+         * 而当前backlog保存的最大数据是repl_backlog.offset+repl_backlog.histlen，因为histlen表示的是used之和（详情看replBacklog结构体注释）
+         * 其实也就是server.repl_buffer_blocks有效数据大小，如果slave请求的offset比这个和还大，说明请求超过最大有效数据了
+         * 肯定也是无效的
+         * */
         psync_offset > (server.repl_backlog->offset + server.repl_backlog->histlen))
     {
         serverLog(LL_NOTICE,

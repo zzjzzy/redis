@@ -1146,6 +1146,7 @@ typedef struct replBacklog {
     rax *blocks_index;           /* The index of recorded blocks of replication
                                   * buffer for quickly searching replication
                                   * offset on partial resynchronization. */
+    // repl_backlog.histlen记录的是server.repl_buffer_blocks所有relpBufBlock的used之和，详情看incrementalTrimReplicationBacklog的注释
     long long histlen;           /* Backlog actual data length */
     // 含义见incrementalTrimReplicationBacklog中的注释
     long long offset;            /* Replication "master offset" of first
