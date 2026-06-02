@@ -3168,8 +3168,10 @@ void replicationSetMaster(char *ip, int port) {
 /* 停止和master的复制
  * 调用场景
  * 1. syncCommand调用，当master发送psync replid offset failover时，会调用
+ * 2. 用redis cli连接slave，然后执行slaveof no one
  * */
 void replicationUnsetMaster(void) {
+    serverLog(LL_NOTICE, "replicationUnsetMaster called");
     if (server.masterhost == NULL) return; /* Nothing to do. */
 
     /* Fire the master link modules event. */
@@ -3244,6 +3246,8 @@ void replicationHandleMasterDisconnection(void) {
     /* Try to re-connect immediately rather than wait for replicationCron
      * waiting 1 second may risk backlog being recycled. */
     if (server.masterhost) {
+        // 先启动master和slave，然后重启master，slave可以触发这段代码，而且会触发部分复制，不会全量复制
+        // 这里有疑问：为什么触发的是部分复制？master重启后replid不是变了吗
         serverLog(LL_NOTICE,"Reconnecting to MASTER %s:%d",
             server.masterhost, server.masterport);
         connectWithMaster();
@@ -3412,6 +3416,9 @@ void replicationSendAck(void) {
  *
  * replicationResurrectCachedMaster() that is used after a successful PSYNC
  * handshake in order to reactivate the cached master.
+ */
+/*
+ * freeClient会调用这个方法
  */
 void replicationCacheMaster(client *c) {
     serverAssert(server.master != NULL && server.cached_master == NULL);

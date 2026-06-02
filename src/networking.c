@@ -2759,6 +2759,7 @@ void readQueryFromClient(connection *conn) {
         if (connGetState(conn) == CONN_STATE_CONNECTED) {
             return;
         } else {
+            serverLog(LL_NOTICE, "readQueryFromClient error: %s", connGetLastError(c->conn));
             serverLog(LL_VERBOSE, "Reading from client: %s",connGetLastError(c->conn));
             freeClientAsync(c);
             goto done;
