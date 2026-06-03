@@ -802,6 +802,10 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
     char buf[128];
     int buflen;
 
+    serverLog(LL_NOTICE, "server.replid是:%s, server.replid2是:%s", server.replid, server.replid2);
+    serverLog(LL_NOTICE, "server.master_repl_offset是:%lld, server.second_replid_offset是:%lld", server.master_repl_offset, server.second_replid_offset);
+    serverLog(LL_NOTICE, "slave请求的replid: %s, offset: %lld", master_replid, psync_offset);
+
     /* Is the replication ID of this master the same advertised by the wannabe
      * slave via PSYNC? If the replication ID changed this master has a
      * different replication history, and there is no way to continue.

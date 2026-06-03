@@ -1904,7 +1904,7 @@ struct redisServer {
     int shutdown_on_sigint;         /* Shutdown flags configured for SIGINT. */
     int shutdown_on_sigterm;        /* Shutdown flags configured for SIGTERM. */
 
-    /* 保存master返回的replid，如果是+CONTINUE增量复制并且master返回了不同的replid，会将旧的replid保存在这里
+    /* 保存master返回的replid，如果是+CONTINUE增量复制并且master返回了不同的replid，会将旧的replid保存在replid2中
      * 下面的second_replid_offset同理，参考slaveTryPartialResynchronization(replicaion.c)
      * 注意master和slave都有使用replid，对于master，replid就是当前master复制要用的replid
      * 遗留问题：多个slave同时连接master，master用一个replid吗？
@@ -1912,8 +1912,7 @@ struct redisServer {
     /* Replication (master) */
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
     char replid2[CONFIG_RUN_ID_SIZE+1]; /* replid inherited from master*/
-    // feedReplicationBuffer有段代码tail->repl_offset = server.master_repl_offset + 1;
-    // 可知，master_repl_offset代表的是repl_buffer_blocks中所有replBufBlock.buf的size大小？TODO
+    // 看下incrementalTrimReplicationBacklog注释，简单说就是从复制开始时，所有保存到复制缓冲区的总字节数
     long long master_repl_offset;   /* My current replication offset */
     long long second_replid_offset; /* Accept offsets up to this for replid2. */
     redisAtomic long long fsynced_reploff_pending;/* Largest replication offset to
