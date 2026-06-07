@@ -190,6 +190,14 @@ void rebaseReplicationBuffer(long long base_repl_offset) {
     listIter li;
     listNode *ln;
     listRewind(server.repl_buffer_blocks, &li);
+    /* feedReplicationBuffer有段代码tail->repl_offset = server.master_repl_offset + 1;
+     * 也就是，server.repl_buffer_blocks创建的node设置repl_offset时是基于master_repl_offset的
+     * 这样master重启后，如果master rdb保存了offset，那重启后会设置到master_repl_offset，这样的话，master重启后
+     * server.repl_buffer_blocks的第一个节点的repl_offset也不一定从0开始
+     * 所以下面会设置server.repl_buffer_block.repl_offset += xxx
+     * ZZJ TODO 不过这里还是有点没明白，这里执行了+=操作，那就是默认之前还没有正确设置server.master_repl_offset，导致repl_buffer_blocks中的
+     * node是从0开始累计的，所以才需要在这里+=一下吗？
+     * */
     while ((ln = listNext(&li))) {
         replBufBlock *o = listNodeValue(ln);
         o->repl_offset += base_repl_offset;
@@ -812,6 +820,9 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
      *
      * Note that there are two potentially valid replication IDs: the ID1
      * and the ID2. The ID2 however is only valid up to a specific offset. */
+    // 这个if判断参考下语雀笔记【replid2和second_replid_offset是怎么起作用的？】【关键总结】
+    // 这个if的理解：slave请求的replid和master replid不一致，或者和replid2不一致，或者和replid2一致，但是请求的offset大于second_offset
+    // 则需要走full_resync
     if (strcasecmp(master_replid, server.replid) &&
         (strcasecmp(master_replid, server.replid2) ||
          psync_offset > server.second_replid_offset))
@@ -2671,7 +2682,9 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             memcpy(new,start,CONFIG_RUN_ID_SIZE);
             new[CONFIG_RUN_ID_SIZE] = '\0';
 
-            // 如果master返回的relpid和记录的不一致
+            // 如果master返回的relpid和记录的不一致，cached_master应该就是用来记录rdb load出来的repl信息的
+            // 如果new=server.cached_master.replid，说明cached_master里的复制信息是可用的，直接用就行
+            // 后面的replicationResurrectCachedMaster方法会把cached_master里赋值为server.master，这样就能直接用了
             if (strcmp(new,server.cached_master->replid)) {
                 /* Master ID changed. */
                 serverLog(LL_NOTICE,"Master replication ID changed to %s",new);
@@ -3498,6 +3511,15 @@ void replicationCacheMasterUsingMyself(void) {
 
     /* The master client we create can be set to any DBID, because
      * the new master will start its replication stream with SELECT. */
+    /* 注意这个方法里会把server.master.repid赋值为server.master_replid，而看调用来源
+     * replicaofCommand->replicationSetMaster之前，并没有设置server.master_replid
+     * 是在后面connectWithMaster(syncWithMaster->slaveTryPartialResynchronization)时，
+     * 把server.maseter_replid赋值为了master返回的replid，server.master_initial_offset赋值为了master返回的offset
+     * 而且是+FULLRESYNC才会赋值，如果是+CONTINUE，会直接复用cached_master的信息
+     * 如果是+FULLRESYNC，readSyncBulkPayload会调用replicationCreateMasterClient，在这之前只是和master建立连接了，还没创建clinet
+     * 由于还没有client，所以也就没法设置server.master.replid，所以需要server.master_replid暂存一下，
+     * 然后replicationCreateMasterClient中会赋值server.master->replid=server.master_replid
+     * */
     replicationCreateMasterClient(NULL,-1);
 
     /* Use our own ID / offset. */

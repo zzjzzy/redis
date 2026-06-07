@@ -2044,7 +2044,6 @@ void freeServerClientMemUsageBuckets(void) {
     server.client_mem_usage_buckets = NULL;
 }
 
-// 正在看
 void initServerConfig(void) {
     int j;
     // 默认绑定的地址{ "*", "-::*" }，*表示所有ipv4地址，-::*表示所有ipv6地址
@@ -6871,6 +6870,13 @@ void loadDataFromDisk(void) {
                     /* Rebase master_repl_offset from rsi.repl_offset. */
                     server.master_repl_offset += rsi.repl_offset;
                     serverAssert(server.repl_backlog);
+                    /* server.repl_backlog.offset是repl_backlog.ref_repl_buf_node的offset
+                     * 而server.repl_backlog.histlen是buf_node已使用的(used)长度，buf_node中添加数据时，会同时更新master_repl_offset和histlen
+                     * 所以关系可以从下图总结
+                     * 起始位置            repl_backlog.node          master_repl_offset
+                     * ---                ------                     ---
+                     * (前面这部分被trim了) |(这一部分是histlen)            |
+                     * */
                     server.repl_backlog->offset = server.master_repl_offset -
                               server.repl_backlog->histlen + 1;
                     rebaseReplicationBuffer(rsi.repl_offset);

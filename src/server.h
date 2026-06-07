@@ -1908,6 +1908,9 @@ struct redisServer {
      * 下面的second_replid_offset同理，参考slaveTryPartialResynchronization(replicaion.c)
      * 注意master和slave都有使用replid，对于master，replid就是当前master复制要用的replid
      * 遗留问题：多个slave同时连接master，master用一个replid吗？
+     * initServerConfig->changeReplicationId会在服务启动时初始化replid的值
+     * loadDataFromDisk中会用rdb文件赋值replid的值(!iAmMaster())，或者会用rdb赋值replid2(iAmMaster())
+     *
      * */
     /* Replication (master) */
     char replid[CONFIG_RUN_ID_SIZE+1];  /* My current replication ID. */
