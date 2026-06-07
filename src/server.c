@@ -6855,6 +6855,8 @@ void loadDataFromDisk(void) {
                 rsi_is_valid = 1;
                 if (!iAmMaster()) {
                     memcpy(server.replid,rsi.repl_id,sizeof(server.replid));
+                    /* slave的master_repl_offset最终是赋值给server.master.offset用的，
+                     * 所以这里赋值的master_repl_offset，最终会在被赋值给server.master.offset，可以看下语雀的梳理*/
                     server.master_repl_offset = rsi.repl_offset;
                     /* If this is a replica, create a cached master from this
                      * information, in order to allow partial resynchronizations

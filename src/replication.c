@@ -478,6 +478,12 @@ void feedReplicationBuffer(char *s, size_t len) {
  * received by our clients in order to create the replication stream.
  * Instead if the instance is a replica and has sub-replicas attached, we use
  * replicationFeedStreamFromMasterStream() */
+/* propagateNow(shouldPropagate)调用时会判断，if (server.masterhost == NULL && (server.repl_backlog || listLength(server.slaves) != 0))
+ * server.masterhost == NULL说明当前必须是master，如果是slave，会有masterhost
+ * 后面的判断确保当前master有slave
+ * 所以下面的server.master_repl_offset += 1;只有当前是master，并且有aof才会加1
+ * 这么说的话，slave的server.master_repl_offset在首次赋值后(readSyncBulkPayload会赋值一次)，后续不会变了
+ * */
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     int j, len;
     char llstr[LONG_STR_SIZE];
@@ -495,6 +501,11 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
 
     /* If there aren't slaves, and there is no backlog buffer to populate,
      * we can return ASAP. */
+    // 注意这里的判断是&&，也就是只有server.repl_backlog，没有slaves是不会走到这个if的，会继续向下执行
+    // 如果当前就是slave，但是slave没有sub slaves，那就是有repl_backlog但是没有slaves。
+    // slave会创建repl_backlog，可以看下readSyncBulkPayload有调用createReplicationBacklog
+    // 但是！！！上面代码if (server.masterhost != NULL)就直接return了，slave是有masterhost的
+    // 所以如果当前是slave，是不会走下面所有代码的
     if (server.repl_backlog == NULL && listLength(slaves) == 0) {
         /* We increment the repl_offset anyway, since we use that for tracking AOF fsyncs
          * even when there's no replication active. This code will not be reached if AOF
@@ -1812,6 +1823,12 @@ void clearReplicationId2(void) {
  * This should be used when an instance is switched from slave to master
  * so that it can serve PSYNC requests performed using the master
  * replication ID. */
+/*
+ * slave取消和master同步，转成master时调用
+ * shiftReplicationId后有以下作用
+ * 1. 其他slave连接当前节点，使用新的replid，可以进行全量复制
+ * 2. 如果其他slave节点之前连接的旧master，现在连接这个新master，如果replid没变，那其他slave节点就不用全量复制，因为replid2一致也可以进行增加复制
+ */
 void shiftReplicationId(void) {
     memcpy(server.replid2,server.replid,sizeof(server.replid));
     /* We set the second replid offset to the master offset + 1, since
@@ -2394,6 +2411,7 @@ void readSyncBulkPayload(connection *conn) {
      * offset of the master. The secondary ID / offset are cleared since
      * we are starting a new history. */
     memcpy(server.replid,server.master->replid,sizeof(server.replid));
+    // 当前是slave，slave的server.master_repl_offset在这里赋值一次后，就不会更新了，详情看replicationFeedSlaves注释
     server.master_repl_offset = server.master->reploff;
     clearReplicationId2();
 
@@ -3497,6 +3515,7 @@ void replicationCacheMaster(client *c) {
  * the new master will accept its replication ID, and potential also the
  * current offset if no data was lost during the failover. So we use our
  * current replication ID and offset in order to synthesize a cached master. */
+/*从上面第一段注释可以看出来，这个就是为了master转成slave，slave转成master时进行增量复制用的*/
 void replicationCacheMasterUsingMyself(void) {
     serverLog(LL_NOTICE,
         "Before turning into a replica, using my own master parameters "
