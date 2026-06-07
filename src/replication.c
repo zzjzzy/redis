@@ -368,6 +368,7 @@ void freeReplicaReferencedReplBuffer(client *replica) {
 /*
  * 此方法分几种情况：看语雀笔记
  * */
+#include <ctype.h>
 void feedReplicationBuffer(char *s, size_t len) {
     static long long repl_block_id = 0;
 
@@ -583,6 +584,8 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         feedReplicationBuffer(aux,len+3);
         feedReplicationBufferWithObject(argv[j]);
         feedReplicationBuffer(aux+len+1,2);
+        serverLog(LL_NOTICE, "relicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld",
+                  server.master_repl_offset, objlen);
     }
 }
 
@@ -621,11 +624,13 @@ void showLatestBacklog(void) {
 /* This function is used in order to proxy what we receive from our master
  * to our sub-slaves. */
 #include <ctype.h>
+// 这个方法在master向slave发送复制命令时会调用，master执行set xx xx命令，slave就能看到执行这个代码
+// 需要注意的是，master发送ping命令给slave，也会执行这个，slave启动后，可以看到有定时调用这个方法
 void replicationFeedStreamFromMasterStream(char *buf, size_t buflen) {
     /* Debugging: this is handy to see the stream sent from master
      * to slaves. Disabled with if(0). */
-    if (0) {
-        printf("%zu:",buflen);
+    if (1) {
+        printf("replicationFeedStreamFromMasterStream %zu:",buflen);
         for (size_t j = 0; j < buflen; j++) {
             printf("%c", isprint(buf[j]) ? buf[j] : '.');
         }
@@ -639,6 +644,9 @@ void replicationFeedStreamFromMasterStream(char *buf, size_t buflen) {
          * replication stream. */
         prepareReplicasToWrite();
         feedReplicationBuffer(buf,buflen);
+        serverLog(LL_NOTICE, "replicationFeedStreamFromMasterStream feedReplicationBuffer called, buflen:%zu,"
+                             "master_repl_offset:%lld", buflen, server.master_repl_offset);
+
     }
 }
 

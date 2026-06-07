@@ -326,6 +326,7 @@ void setCommand(client *c) {
     // argv[2]是set参数的value，value确实需要encoding下
     c->argv[2] = tryObjectEncoding(c->argv[2]);
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
+    serverLog(LL_NOTICE, "setCommand server.master_repl_offset is:%lld", server.master_repl_offset);
 }
 
 // SETNX命令，
