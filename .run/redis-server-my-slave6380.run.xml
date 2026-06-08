@@ -1,5 +1,5 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="redis-server-my-slave6380" type="CLionNativeAppRunConfigurationType" PROGRAM_PARAMS="$ProjectFileDir$/redis.conf --port 6380 --slaveof 127.0.0.1 6379" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="redis" TARGET_NAME="redis-server" CONFIG_NAME="redis-server" version="1" RUN_PATH="$PROJECT_DIR$/src/redis-server">
+  <configuration default="false" name="redis-server-my-slave6380" type="CLionNativeAppRunConfigurationType" PROGRAM_PARAMS="$ProjectFileDir$/redis.conf --port 6380 --dbfilename dump6380.rdb --slaveof 127.0.0.1 6379" REDIRECT_INPUT="false" ELEVATE="false" USE_EXTERNAL_CONSOLE="false" EMULATE_TERMINAL="false" PASS_PARENT_ENVS_2="true" PROJECT_NAME="redis" TARGET_NAME="redis-server" CONFIG_NAME="redis-server" version="1" RUN_PATH="$PROJECT_DIR$/src/redis-server">
     <method v="2" />
   </configuration>
 </component>

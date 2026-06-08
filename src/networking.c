@@ -2507,6 +2507,11 @@ void commandProcessed(client *c) {
     long long prev_offset = c->reploff;
     if (c->flags & CLIENT_MASTER && !(c->flags & CLIENT_MULTI)) {
         /* Update the applied replication offset of our master. */
+        /* c->read_reploff是在readQueryFromClient更新的，读到多少更新多少
+         * 这个公式转换下就是reploff = read_reploff - (len(querybuf) - qb_pos)
+         * len(querybuf)就是querybuf有效数据的总长度，qb_pos代表了已经处理的长度，相减就是还没处理的数据长度
+         * 那read_reploff - 还没处理的长度，不就是已经处理的offset吗，所以c->reploff就是代表slave已经处理的数据的offset
+         * */
         c->reploff = c->read_reploff - sdslen(c->querybuf) + c->qb_pos;
     }
 

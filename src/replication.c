@@ -483,7 +483,8 @@ void feedReplicationBuffer(char *s, size_t len) {
  * server.masterhost == NULL说明当前必须是master，如果是slave，会有masterhost
  * 后面的判断确保当前master有slave
  * 所以下面的server.master_repl_offset += 1;只有当前是master，并且有aof才会加1
- * 这么说的话，slave的server.master_repl_offset在首次赋值后(readSyncBulkPayload会赋值一次)，后续不会变了
+ * 这么说的话，slave的server.master_repl_offset在首次赋值后(readSyncBulkPayload会赋值一次)，后续不会变了？
+ * 错！slave不是通过replicationFeedSlaves更新master_repl_offset，而是通过replicationFeedStreamFromMasterStream。
  * */
 void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
     int j, len;
@@ -584,8 +585,19 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         feedReplicationBuffer(aux,len+3);
         feedReplicationBufferWithObject(argv[j]);
         feedReplicationBuffer(aux+len+1,2);
-        serverLog(LL_NOTICE, "relicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld",
-                  server.master_repl_offset, objlen);
+        if (argv[j]->encoding == OBJ_ENCODING_RAW) {
+            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%s,"
+                                 "server.repl_backlog:%p, slaves count:%ld",
+                      server.master_repl_offset, objlen, (char *)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
+        } else if (argv[j]->encoding == OBJ_ENCODING_INT) {
+            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%ld,"
+                                 "server.repl_backlog:%p, slaves count:%ld",
+                      server.master_repl_offset, objlen, (long)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
+        } else {
+            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:[non-string],"
+                                 "server.repl_backlog:%p, slaves count:%ld",
+                      server.master_repl_offset, objlen, (void *)server.repl_backlog, listLength(slaves));
+        }
     }
 }
 
@@ -2419,7 +2431,6 @@ void readSyncBulkPayload(connection *conn) {
      * offset of the master. The secondary ID / offset are cleared since
      * we are starting a new history. */
     memcpy(server.replid,server.master->replid,sizeof(server.replid));
-    // 当前是slave，slave的server.master_repl_offset在这里赋值一次后，就不会更新了，详情看replicationFeedSlaves注释
     server.master_repl_offset = server.master->reploff;
     clearReplicationId2();
 
