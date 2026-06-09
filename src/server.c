@@ -4368,6 +4368,8 @@ int abortShutdown(void) {
  * it's not safe to call exit(). */
 int finishShutdown(void) {
 
+    serverLog(LL_NOTICE, "finishShutdown called");
+
     int save = server.shutdown_flags & SHUTDOWN_SAVE;
     int nosave = server.shutdown_flags & SHUTDOWN_NOSAVE;
     int force = server.shutdown_flags & SHUTDOWN_FORCE;
