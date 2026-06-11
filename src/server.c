@@ -6881,6 +6881,9 @@ void loadDataFromDisk(void) {
                      * 起始位置            repl_backlog.node          master_repl_offset
                      * ---                ------                     ---
                      * (前面这部分被trim了) |(这一部分是histlen)            |
+                     * 刚启动是server.repl_backlog->histlen是0，所以其实就是server.repl_backlog->offset = server.master_repl_offset+1
+                     *
+                     * 这个的值会影响部分复制是否支持，看下masterTryPartialResynchronization中【psync_offset < server.repl_backlog->offset】的注释
                      * */
                     server.repl_backlog->offset = server.master_repl_offset -
                               server.repl_backlog->histlen + 1;

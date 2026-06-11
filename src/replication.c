@@ -374,6 +374,9 @@ void feedReplicationBuffer(char *s, size_t len) {
 
     if (server.repl_backlog == NULL) return;
 
+    size_t mylen = len;
+    char *mys = s;
+
     while(len > 0) {
         size_t start_pos = 0; /* The position of referenced block to start sending. */
         listNode *start_node = NULL; /* Replica/backlog starts referenced node. */
@@ -470,6 +473,31 @@ void feedReplicationBuffer(char *s, size_t len) {
              * freeMemoryGetNotCountedMemory() for details on replication backlog memory tracking. */
             incrementalTrimReplicationBacklog(REPL_BACKLOG_TRIM_BLOCKS_PER_CALL);
         }
+    }
+    {
+        /* 将 mys 中的不可见字符转义后再打印：\r->\r字面, \n->\n字面, 空格保留, 其他不可见字符->. */
+        size_t vis_len = mylen * 2 + 1; /* 最坏情况每个字符扩展为2个字符(\r或\n) */
+        char *vis = zmalloc(vis_len);
+        size_t vi = 0;
+        for (size_t i = 0; i < mylen; i++) {
+            unsigned char c = (unsigned char)mys[i];
+            if (c == '\r') {
+                vis[vi++] = '\\';
+                vis[vi++] = 'r';
+            } else if (c == '\n') {
+                vis[vi++] = '\\';
+                vis[vi++] = 'n';
+            } else if (c == ' ') {
+                vis[vi++] = ' ';
+            } else if (c < 0x20 || c == 0x7f) {
+                vis[vi++] = '.';
+            } else {
+                vis[vi++] = (char)c;
+            }
+        }
+        vis[vi] = '\0';
+        serverLog(LL_NOTICE, "feedReplicationBuffer finished, s:%s,len:%zu,master_repl_offset:%lld", vis, mylen, server.master_repl_offset);
+        zfree(vis);
     }
 }
 
@@ -585,19 +613,19 @@ void replicationFeedSlaves(list *slaves, int dictid, robj **argv, int argc) {
         feedReplicationBuffer(aux,len+3);
         feedReplicationBufferWithObject(argv[j]);
         feedReplicationBuffer(aux+len+1,2);
-        if (argv[j]->encoding == OBJ_ENCODING_RAW) {
-            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%s,"
-                                 "server.repl_backlog:%p, slaves count:%ld",
-                      server.master_repl_offset, objlen, (char *)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
-        } else if (argv[j]->encoding == OBJ_ENCODING_INT) {
-            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%ld,"
-                                 "server.repl_backlog:%p, slaves count:%ld",
-                      server.master_repl_offset, objlen, (long)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
-        } else {
-            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:[non-string],"
-                                 "server.repl_backlog:%p, slaves count:%ld",
-                      server.master_repl_offset, objlen, (void *)server.repl_backlog, listLength(slaves));
-        }
+//        if (argv[j]->encoding == OBJ_ENCODING_RAW) {
+//            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%s,"
+//                                 "server.repl_backlog:%p, slaves count:%ld",
+//                      server.master_repl_offset, objlen, (char *)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
+//        } else if (argv[j]->encoding == OBJ_ENCODING_INT) {
+//            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:%ld,"
+//                                 "server.repl_backlog:%p, slaves count:%ld",
+//                      server.master_repl_offset, objlen, (long)argv[j]->ptr, (void *)server.repl_backlog, listLength(slaves));
+//        } else {
+//            serverLog(LL_NOTICE, "replicationFeedSlaves called, master_repl_offset:%lld, objlen:%ld, cmd:[non-string],"
+//                                 "server.repl_backlog:%p, slaves count:%ld",
+//                      server.master_repl_offset, objlen, (void *)server.repl_backlog, listLength(slaves));
+//        }
     }
 }
 
@@ -641,7 +669,7 @@ void showLatestBacklog(void) {
 void replicationFeedStreamFromMasterStream(char *buf, size_t buflen) {
     /* Debugging: this is handy to see the stream sent from master
      * to slaves. Disabled with if(0). */
-    if (1) {
+    if (0) {
         printf("replicationFeedStreamFromMasterStream %zu:",buflen);
         for (size_t j = 0; j < buflen; j++) {
             printf("%c", isprint(buf[j]) ? buf[j] : '.');
@@ -656,8 +684,8 @@ void replicationFeedStreamFromMasterStream(char *buf, size_t buflen) {
          * replication stream. */
         prepareReplicasToWrite();
         feedReplicationBuffer(buf,buflen);
-        serverLog(LL_NOTICE, "replicationFeedStreamFromMasterStream feedReplicationBuffer called, buflen:%zu,"
-                             "master_repl_offset:%lld", buflen, server.master_repl_offset);
+//        serverLog(LL_NOTICE, "replicationFeedStreamFromMasterStream feedReplicationBuffer called, buflen:%zu,"
+//                             "master_repl_offset:%lld", buflen, server.master_repl_offset);
 
     }
 }
@@ -843,7 +871,8 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
 
     serverLog(LL_NOTICE, "server.replid是:%s, server.replid2是:%s", server.replid, server.replid2);
     serverLog(LL_NOTICE, "server.master_repl_offset是:%lld, server.second_replid_offset是:%lld", server.master_repl_offset, server.second_replid_offset);
-    serverLog(LL_NOTICE, "slave请求的replid: %s, offset: %lld", master_replid, psync_offset);
+    serverLog(LL_NOTICE, "slave请求的replid: %s, offset: %lld, server.backlog.offset: %lld",
+              master_replid, psync_offset, server.repl_backlog->offset);
 
     /* Is the replication ID of this master the same advertised by the wannabe
      * slave via PSYNC? If the replication ID changed this master has a
@@ -881,6 +910,9 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
 
     /* We still have the data our slave is asking for? */
     if (!server.repl_backlog ||
+        // 如果master从rdb加载了offset，刚启动是server.repl_backlog->offset就是等于rdb中保存的offset，也就是master下线前最新的offset
+        // 也就是说，master如果重启过，repl_backlog丢失了，并且slave的同步小于master，那就没办法部分复制了
+        // 可以结合语雀笔记【模拟部分复制的offset slave小于master】
         psync_offset < server.repl_backlog->offset ||
         /* 从这个大于判断再次理解下offset和histlen的含义
          * server.repl_backlog.offset等于server.repl_backlog.ref_repl_buf_node.repl_offset，其实也就是server.repl_buffer_blocks
