@@ -912,7 +912,7 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
     if (!server.repl_backlog ||
         // 如果master从rdb加载了offset，刚启动是server.repl_backlog->offset就是等于rdb中保存的offset，也就是master下线前最新的offset
         // 也就是说，master如果重启过，repl_backlog丢失了，并且slave的同步小于master，那就没办法部分复制了
-        // 可以结合语雀笔记【模拟部分复制的offset slave小于master】
+        // 可以结合语雀笔记【复制相关关键场景模拟】
         psync_offset < server.repl_backlog->offset ||
         /* 从这个大于判断再次理解下offset和histlen的含义
          * server.repl_backlog.offset等于server.repl_backlog.ref_repl_buf_node.repl_offset，其实也就是server.repl_buffer_blocks
