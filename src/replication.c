@@ -835,9 +835,8 @@ int replicationSetupSlaveForFullResync(client *slave, long long offset) {
     char buf[128];
     int buflen;
 
-    /* 如果首次复制，redis cli打印的日志是PSYNC replied +FULLRESYNC e2e74af70145c450776b3f2c4faff60937da0939 0
-     * 所以这里的offset可以先理解为0
-    */
+    serverLog(LL_NOTICE, "replicationSetupSlaveForFullResync offset:%lld", offset);
+
     slave->psync_initial_offset = offset;
     slave->replstate = SLAVE_STATE_WAIT_BGSAVE_END;
     /* We are going to accumulate the incremental changes for this
@@ -869,10 +868,14 @@ int masterTryPartialResynchronization(client *c, long long psync_offset) {
     char buf[128];
     int buflen;
 
+    long long backlog_offset = -1;
+    if (server.repl_backlog) {
+        backlog_offset = server.repl_backlog->offset;
+    }
     serverLog(LL_NOTICE, "server.replid是:%s, server.replid2是:%s", server.replid, server.replid2);
     serverLog(LL_NOTICE, "server.master_repl_offset是:%lld, server.second_replid_offset是:%lld", server.master_repl_offset, server.second_replid_offset);
     serverLog(LL_NOTICE, "slave请求的replid: %s, offset: %lld, server.backlog.offset: %lld",
-              master_replid, psync_offset, server.repl_backlog->offset);
+              master_replid, psync_offset, backlog_offset);
 
     /* Is the replication ID of this master the same advertised by the wannabe
      * slave via PSYNC? If the replication ID changed this master has a
@@ -1248,7 +1251,6 @@ void syncCommand(client *c) {
             if (!(c->flags & CLIENT_REPL_RDBONLY))
                 // 这个是由于rdb正在进行中，所以slave这个client记录的复制ref_repl_buf_node和ref_block_pos都还没开始同步
                 // 所以可以直接将slave的信息复制到c中。
-                // ZZJ TODO，有没有可能，在执行到这个代码的时候，正好rdb完成了，slave中的repl相关信息已经开始更新了
                 copyReplicaOutputBuffer(c,slave);
             // 注意这个方法只在有bgsave子进程执行中才会调用
             replicationSetupSlaveForFullResync(c,slave->psync_initial_offset);
@@ -2754,6 +2756,11 @@ int slaveTryPartialResynchronization(connection *conn, int read_reply) {
             // 如果master返回的relpid和记录的不一致，cached_master应该就是用来记录rdb load出来的repl信息的
             // 如果new=server.cached_master.replid，说明cached_master里的复制信息是可用的，直接用就行
             // 后面的replicationResurrectCachedMaster方法会把cached_master里赋值为server.master，这样就能直接用了
+            // 调用slaveTryPartialResynchronization之前，会调用replicationCacheMasterUsingMyself，把当前server的replid缓存到cached_master中
+            // 所以这里的cached_master.replid其实就是当前server转成slave之前，自己的replid。
+            // 如果new=server.cached_master.replid，有可能是slave和master失联过，都没重启，replid是一致的
+            // 如果master重启过，slave发起部分复制，由于master的replid2一致，也能部分复制，但是master返回给slave的replid不一样了
+            // 也就是这里的if判断成立，这种情况，就要更新replid为master最新的
             if (strcmp(new,server.cached_master->replid)) {
                 /* Master ID changed. */
                 serverLog(LL_NOTICE,"Master replication ID changed to %s",new);
