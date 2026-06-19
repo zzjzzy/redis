@@ -21,4 +21,13 @@ cli1:
 cli2:
 	./src/redis-cli -p 6381
 
+sent:
+	./src/redis-cli -p 26379
+
+sent1:
+	./src/redis-cli -p 26380
+
+sent2:
+	./src/redis-cli -p 26381
+
 .PHONY: install
