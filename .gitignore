@@ -45,4 +45,4 @@ Makefile.dep
 compile_commands.json
 redis.code-workspace
 mymain
-src/dump6380.rdb
+*.rdb

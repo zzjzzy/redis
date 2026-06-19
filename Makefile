@@ -15,7 +15,10 @@ mydebug:
 cli:
 	./src/redis-cli
 
-clis1:
+cli1:
 	./src/redis-cli -p 6380
+
+cli2:
+	./src/redis-cli -p 6381
 
 .PHONY: install
