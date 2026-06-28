@@ -1276,7 +1276,7 @@ void instanceLinkConnectionError(const redisAsyncContext *c) {
 void sentinelLinkEstablishedCallback(const redisAsyncContext *c, int status) {
     if (status != C_OK) {
         instanceLinkConnectionError(c);
-        serverLog(LL_NOTICE, "sentinelLinkEstablishedCallback status not ok:%d", status);
+//        serverLog(LL_NOTICE, "sentinelLinkEstablishedCallback status not ok:%d", status);
     }
 }
 
@@ -2433,6 +2433,7 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
     // 如果连接失败，ri->link->disconnected=1，就会一直尝试连接
     // 但是，测试发现节点连接失败，也会走到最后的分支，赋值disconnected=0，disconnected重新赋值为1并且清空link->cc是在
     // instanceLinkConnectionError(sentinelLinkEstablishedCallback->instanceLinkConnectionError)
+    // sentinelLinkEstablishedCallback的调用流程看这个方法的注释
     if (ri->link->disconnected == 0) return;
     if (ri->addr->port == 0) return; /* port == 0 means invalid address. */
     instanceLink *link = ri->link;
@@ -2477,8 +2478,8 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
                       ri->addr->port, server.bind_source_addr, link->cc->err);
         } else {
             // 经测试，即使节点不可达，也会走到这个分支
-            serverLog(LL_NOTICE, "redisAsyncConnectBind success ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
-                      ri->addr->port, server.bind_source_addr, link->cc->err);
+//            serverLog(LL_NOTICE, "redisAsyncConnectBind success ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+//                      ri->addr->port, server.bind_source_addr, link->cc->err);
             link->pending_commands = 0;
             link->cc_conn_time = mstime();
             link->cc->data = link;
