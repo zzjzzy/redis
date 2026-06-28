@@ -179,6 +179,7 @@ typedef struct instanceLink {
                                    the link was down. */
 } instanceLink;
 
+// 一个sentinelRedisInstance代表了sentinel监控的一个节点，可能是master节点、slave节点、sentinel节点
 typedef struct sentinelRedisInstance {
     int flags;      /* See SRI_... defines */
     char *name;     /* Master name from the point of view of this sentinel. */
@@ -213,7 +214,9 @@ typedef struct sentinelRedisInstance {
     mstime_t slave_conf_change_time; /* Last time slave master addr changed. */
 
     /* Master specific. */
+    // value是sentinelRedisInstance类型
     dict *sentinels;    /* Other sentinels monitoring the same master. */
+    // value是sentinelRedisInstance类型
     dict *slaves;       /* Slaves for this master instance. */
     unsigned int quorum;/* Number of sentinels that need to agree on failure. */
     int parallel_syncs; /* How many slaves to reconfigure at same time. */
@@ -255,6 +258,7 @@ typedef struct sentinelRedisInstance {
 struct sentinelState {
     char myid[CONFIG_RUN_ID_SIZE+1]; /* This sentinel ID. */
     uint64_t current_epoch;         /* Current epoch. */
+    // key是master name，value是sentinelRedisInstance类型
     dict *masters;      /* Dictionary of master sentinelRedisInstances.
                            Key is the instance name, value is the
                            sentinelRedisInstance structure pointer. */
@@ -734,6 +738,9 @@ void sentinelGenerateInitialMonitorEvents(void) {
     di = dictGetIterator(sentinel.masters);
     while((de = dictNext(di)) != NULL) {
         sentinelRedisInstance *ri = dictGetVal(de);
+        // 会打印如下日志：+monitor master mymaster 127.0.0.1 6379 quorum 2
+        // [master mymaster 127.0.0.1 6379]这部分是sentinelEvent自动处理的，
+        // [quorum 2]是在sentinelEvent自动处理后拼接的自定义打印的信息
         sentinelEvent(LL_WARNING,"+monitor",ri,"%@ quorum %d",ri->quorum);
     }
     dictReleaseIterator(di);
@@ -1104,16 +1111,25 @@ instanceLink *releaseInstanceLink(instanceLink *link, sentinelRedisInstance *ri)
  * Return C_OK if a matching Sentinel was found in the context of a
  * different master and sharing was performed. Otherwise C_ERR
  * is returned. */
+// 参数ri是一个SRI_SENTINEL类型的sentinelRedisInstance
 int sentinelTryConnectionSharing(sentinelRedisInstance *ri) {
     serverAssert(ri->flags & SRI_SENTINEL);
     dictIterator *di;
     dictEntry *de;
 
     if (ri->runid == NULL) return C_ERR; /* No way to identify it. */
+    /*这个校验应该是健壮性校验，正常需要尝试分享的应该是refcount=1的*/
     if (ri->link->refcount > 1) return C_ERR; /* Already shared. */
 
     di = dictGetIterator(sentinel.masters);
     while((de = dictNext(di)) != NULL) {
+        /*
+         * 比如server.masters有两个m1和m2
+         * m1已经处理好了，m1.sentinels = [s1, s2, s3]，对应的实例为s1.1, s1.2, s1.3
+         * 这时候又去读到m2的known-sentinel配置，也是有s1, s2, s3 3个配置
+         * 这时候会创建新的sentinelRedisInstance实例，比如s2.1, s2.2, s2.3
+         * 在处理s2.1时，会在m1.sentinels中找到runId相同的s1.1，就会赋值s2.1->link = s1.1->link，同时更新link.refcount
+         */
         sentinelRedisInstance *master = dictGetVal(de), *match;
         /* We want to share with the same physical Sentinel referenced
          * in other masters, so skip our master. */
@@ -1780,6 +1796,10 @@ void freeSentinelLoadQueueEntry(void *item) {
 /* This function is used for queuing sentinel configuration, the main
  * purpose of this function is to delay parsing the sentinel config option
  * in order to avoid the order dependent issue from the config. */
+/* argv: 已经解析好的配置参数(split过的)，看调用来源可知，argv是去掉sentinel开头配置的
+ * 比如sentinel monitor mymaster 127.0.0.1 6379 2，传过来的argv是monitor mymaster 127.0.0.1 6379 2
+ * argc: 参数的个数
+ * */
 void queueSentinelConfig(sds *argv, int argc, int linenum, sds line) {
     int i;
     struct sentinelLoadQueueEntry *entry;
