@@ -220,6 +220,7 @@ static void myConnectionHandler(connection *conn) {
 
 static void myConnReadHandler(connection *conn) {
     void *pd = connGetPrivateData(conn);
+    UNUSED(pd);
     // 这个日志先不打印了，因为可能会有readBuf是0的事件，频繁调用myConnReadHandler
 //    printf("myConnReadHandler pd: %p\n", pd);
     // 可以调用connRead读取数据

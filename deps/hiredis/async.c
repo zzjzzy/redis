@@ -708,6 +708,8 @@ static int __redisAsyncHandleConnect(redisAsyncContext *ac) {
 
 void redisAsyncRead(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
+//    printf("redisAsyncRead called, host: %s, source_addr:%s, port:%d\n",
+//           c->tcp.host, c->tcp.source_addr, c->tcp.port);
 
     if (redisBufferRead(c) == REDIS_ERR) {
         __redisAsyncDisconnect(ac);
@@ -721,8 +723,13 @@ void redisAsyncRead(redisAsyncContext *ac) {
 /* This function should be called when the socket is readable.
  * It processes all replies that can be read and executes their callbacks.
  */
+/* redisAsyncHandleRead和redisAsyncRead的区别
+ * redisAsyncHandleRead这个方法调用的c->funcs->async_read(ac);就是redisAsyncRead
+ * */
 void redisAsyncHandleRead(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
+//    printf("redisAsyncHandleRead called, host:%s, source_addr:%s, port:%d\n",
+//           c->tcp.host, c->tcp.source_addr, c->tcp.port);
     /* must not be called from a callback */
     assert(!(c->flags & REDIS_IN_CALLBACK));
 
@@ -740,6 +747,8 @@ void redisAsyncHandleRead(redisAsyncContext *ac) {
 
 void redisAsyncWrite(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
+//    printf("redisAsyncWrite called, host:%s, source_addr:%s, port:%d\n",
+//           c->tcp.host, c->tcp.source_addr, c->tcp.port);
     int done = 0;
 
     if (redisBufferWrite(c,&done) == REDIS_ERR) {
@@ -758,6 +767,8 @@ void redisAsyncWrite(redisAsyncContext *ac) {
 
 void redisAsyncHandleWrite(redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
+//    printf("redisAsyncHandleWrite called, host:%s, source_addr:%s, port:%d\n",
+//           c->tcp.host, c->tcp.source_addr, c->tcp.port);
     /* must not be called from a callback */
     assert(!(c->flags & REDIS_IN_CALLBACK));
 

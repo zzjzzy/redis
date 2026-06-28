@@ -1265,13 +1265,25 @@ void instanceLinkConnectionError(const redisAsyncContext *c) {
 
 /* Hiredis connection established / disconnected callbacks. We need them
  * just to cleanup our link state. */
+/*
+ * redis建立连接后，会设置sentinelLinkEstablishedCallback到redisAsyncContext.onConnect中
+ * ac.onConnect调用流程如下
+ * redisAsyncHandleWrite/redisAsyncHandleRead -> __redisAsyncHandleConnect -> __redisAsyncHandleConnectFailure(会传status=REDIS_ERR) -> __redisRunConnectCallback -> ac.onConnect
+ * __redisAsyncHandleConnect -> __redisRunConnectCallback -> ac.onConnect
+ * redisAsyncHandleWrite/redisAsyncHandleRead是用来处理读写的，这里会同时判断连接是否成功，如果不成功会调用__redisAsyncHandleConnect
+ * redisAsyncHandleWrite(redisAeWriteEvent)/redisAsyncHandleRead(redisAeReadEvent)的注册流程语雀有梳理
+*/
 void sentinelLinkEstablishedCallback(const redisAsyncContext *c, int status) {
-    if (status != C_OK) instanceLinkConnectionError(c);
+    if (status != C_OK) {
+        instanceLinkConnectionError(c);
+        serverLog(LL_NOTICE, "sentinelLinkEstablishedCallback status not ok:%d", status);
+    }
 }
 
 void sentinelDisconnectCallback(const redisAsyncContext *c, int status) {
     UNUSED(status);
     instanceLinkConnectionError(c);
+    serverLog(LL_NOTICE,"sentinelDisconnectCallback");
 }
 
 /* ========================== sentinelRedisInstance ========================= */
@@ -2417,6 +2429,10 @@ static int instanceLinkNegotiateTLS(redisAsyncContext *context) {
  * one of the two links (commands and pub/sub) is missing. */
 void sentinelReconnectInstance(sentinelRedisInstance *ri) {
 
+    // 进测试发现，如果连接成功，会设置ri->link->disconnected=0，这样后续定时调度就直接return了
+    // 如果连接失败，ri->link->disconnected=1，就会一直尝试连接
+    // 但是，测试发现节点连接失败，也会走到最后的分支，赋值disconnected=0，disconnected重新赋值为1并且清空link->cc是在
+    // instanceLinkConnectionError(sentinelLinkEstablishedCallback->instanceLinkConnectionError)
     if (ri->link->disconnected == 0) return;
     if (ri->addr->port == 0) return; /* port == 0 means invalid address. */
     instanceLink *link = ri->link;
@@ -2445,15 +2461,24 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
         if (link->cc && !link->cc->err) anetCloexec(link->cc->c.fd);
         if (!link->cc) {
             sentinelEvent(LL_DEBUG,"-cmd-link-reconnection",ri,"%@ #Failed to establish connection");
+            serverLog(LL_NOTICE, "redisAsyncConnectBind Failed to establish connection ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+                      ri->addr->port, server.bind_source_addr, link->cc->err);
         } else if (!link->cc->err && server.tls_replication &&
                 (instanceLinkNegotiateTLS(link->cc) == C_ERR)) {
             sentinelEvent(LL_DEBUG,"-cmd-link-reconnection",ri,"%@ #Failed to initialize TLS");
             instanceLinkCloseConnection(link,link->cc);
+            serverLog(LL_NOTICE, "redisAsyncConnectBind Failed to initialize TLS ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+                      ri->addr->port, server.bind_source_addr, link->cc->err);
         } else if (link->cc->err) {
             sentinelEvent(LL_DEBUG,"-cmd-link-reconnection",ri,"%@ #%s",
                 link->cc->errstr);
             instanceLinkCloseConnection(link,link->cc);
+            serverLog(LL_NOTICE, "redisAsyncConnectBind errstr ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+                      ri->addr->port, server.bind_source_addr, link->cc->err);
         } else {
+            // 经测试，即使节点不可达，也会走到这个分支
+            serverLog(LL_NOTICE, "redisAsyncConnectBind success ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+                      ri->addr->port, server.bind_source_addr, link->cc->err);
             link->pending_commands = 0;
             link->cc_conn_time = mstime();
             link->cc->data = link;
@@ -2508,8 +2533,12 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
     }
     /* Clear the disconnected status only if we have both the connections
      * (or just the commands connection if this is a sentinel instance). */
-    if (link->cc && (ri->flags & SRI_SENTINEL || link->pc))
+    if (link->cc && (ri->flags & SRI_SENTINEL || link->pc)) {
         link->disconnected = 0;
+        // 经测试，即使节点不可达，也会走到这个分支
+//        serverLog(LL_NOTICE, "redisAsyncConnectBind disconnected=0 ip:%s, port:%d, bind_source_addr:%s, err:%d", ri->addr->ip,
+//                  ri->addr->port, server.bind_source_addr, link->cc->err);
+    }
 }
 
 /* ======================== Redis instances pinging  ======================== */

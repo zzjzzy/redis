@@ -12,6 +12,10 @@ mydebug:
 	make clean
 	make CFLAGS="-g -O0" MALLOC=jemalloc
 
+myhiredis:
+	cd deps && make hiredis && cd ..
+#    make hiredis lua fpconv hdr_histogram jemalloc linenoise
+
 cli:
 	./src/redis-cli
 
