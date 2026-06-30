@@ -386,6 +386,7 @@ void myCmd(client *c) {
         myOptions.push_cb = NULL;
         myOptions.options |= REDIS_OPT_NO_PUSH_AUTOFREE;
 //        myOptions.options |= REDIS_OPT_NONBLOCK;
+        // 这里设置成REDIS_BLOCK，下面的rc->flags就不是REDIS_CONNECTED了，也可以获取到错误信息
         myOptions.options |= REDIS_BLOCK;
         myOptions.type = REDIS_CONN_TCP;
         myOptions.endpoint.tcp.ip = "127.0.0.1";

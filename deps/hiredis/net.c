@@ -334,7 +334,7 @@ static int redisContextWaitReady(redisContext *c, long msec) {
         }
 
         /*
-         * res == 1：socket 变为可写，但还需进一步确认连接是否真的成功。
+         * res == 1：socket 变为可写，但还需进一步确认连接是否真的成功。因为可写不代表真的成功了。
          * 非阻塞 connect 可能失败（如 ECONNREFUSED），此时 socket 同样可写，
          * 需要通过 getsockopt(SO_ERROR) 获取底层真实错误。
          *
