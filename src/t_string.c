@@ -387,7 +387,10 @@ void myCmd(client *c) {
         myOptions.options |= REDIS_OPT_NO_PUSH_AUTOFREE;
 //        myOptions.options |= REDIS_OPT_NONBLOCK;
         // 这里设置成REDIS_BLOCK，下面的rc->flags就不是REDIS_CONNECTED了，也可以获取到错误信息
+        // 注意还需要设置connect_timeout，不然默认值是-1，还是没法等待连接成功
         myOptions.options |= REDIS_BLOCK;
+        struct timeval tv = { .tv_sec = 1, .tv_usec = 500000 };
+        myOptions.connect_timeout = &tv;
         myOptions.type = REDIS_CONN_TCP;
         myOptions.endpoint.tcp.ip = "127.0.0.1";
         myOptions.endpoint.tcp.port = atoi((char *)decoded->ptr + 7);
