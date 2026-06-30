@@ -30,6 +30,7 @@
 #include "server.h"
 #include "my/demo/demo.h"
 #include <math.h> /* isnan(), isinf() */
+#include "hiredis.h"
 
 /* Forward declarations */
 int getGenericCommand(client *c);
@@ -379,11 +380,31 @@ void myCmd(client *c) {
         // 这里要加\n，不然有输出缓冲区，导致打印不出来
         printf("connTest called\n");
         myConnTest();
+    } else if (strncasecmp((char *)decoded->ptr, "hiredis", 7) == 0) {
+        // hiredis使用示例，参考sentinelReconnectInstance(sentinel.c)方法
+        redisOptions myOptions = {0};
+        myOptions.push_cb = NULL;
+        myOptions.options |= REDIS_OPT_NO_PUSH_AUTOFREE;
+//        myOptions.options |= REDIS_OPT_NONBLOCK;
+        myOptions.options |= REDIS_BLOCK;
+        myOptions.type = REDIS_CONN_TCP;
+        myOptions.endpoint.tcp.ip = "127.0.0.1";
+        myOptions.endpoint.tcp.port = atoi((char *)decoded->ptr + 7);
+        redisContext *rc = redisConnectWithOptions(&myOptions);
+        printf("rc.fd:%d, rc.err:%d, rc.errstr:%s, rc.tcp.host:%s, "
+               "rc.tcp.source_addr:%s, rc.tcp.port:%d\n",
+               rc->fd, rc->err, rc->errstr, rc->tcp.host, rc->tcp.source_addr, rc->tcp.port);
+        /* 这里打印的是rc->flags=2，也就是REDIS_CONNECTED，是因为设置的是REDIS_OPT_NONBLOCK
+         * 看_redisContextConnectTcp(net.c)代码，如果连接不通，会走到else if (errno == EINPROGRESS)分支，这里判断如果不是blocking
+         * 会直接走到成功赋值c->flags |= REDIS_CONNECTED;
+         * */
+        printf("rc->flags:%d\n", rc->flags);
     }
     decrRefCount(decoded);  // 注意释放引用
     robj *o = createStringObject("mycmd reply", 11);
     addReplyBulk(c, o);
     decrRefCount(o);
+
 }
 
 /*

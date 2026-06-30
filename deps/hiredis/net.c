@@ -134,6 +134,19 @@ static int redisCreateSocket(redisContext *c, int type) {
     return REDIS_OK;
 }
 
+/*
+ * 设置 socket 为阻塞或非阻塞模式。
+ *
+ * 底层通过 fcntl() 修改文件描述符标志中的 O_NONBLOCK 位：
+ *   - blocking = 0 → flags |= O_NONBLOCK   非阻塞模式
+ *   - blocking = 1 → flags &= ~O_NONBLOCK  阻塞模式
+ *
+ * hredis 连接流程中，无论用户是否指定了 REDIS_BLOCK 标志，
+ * 在 connect() 之前都会先调用 redisSetBlocking(c, 0) 将 socket
+ * 设为非阻塞，目的是让 connect() 变为非阻塞调用，从而可以通过
+ * poll() + redisContextWaitReady() 实现带超时的连接等待。
+ * 连接成功后再根据用户意图决定是否恢复为阻塞模式。
+ */
 static int redisSetBlocking(redisContext *c, int blocking) {
 #ifndef _WIN32
     int flags;
@@ -148,9 +161,9 @@ static int redisSetBlocking(redisContext *c, int blocking) {
     }
 
     if (blocking)
-        flags &= ~O_NONBLOCK;
+        flags &= ~O_NONBLOCK;   /* 清除 O_NONBLOCK 位 → 阻塞模式 */
     else
-        flags |= O_NONBLOCK;
+        flags |= O_NONBLOCK;    /* 设置 O_NONBLOCK 位 → 非阻塞模式 */
 
     if (fcntl(c->fd, F_SETFL, flags) == -1) {
         __redisSetErrorFromErrno(c,REDIS_ERR_IO,"fcntl(F_SETFL)");
@@ -271,27 +284,67 @@ static int redisContextTimeoutMsec(redisContext *c, long *result)
     return REDIS_OK;
 }
 
+/*
+ * 等待非阻塞 connect() 完成（带超时）。
+ *
+ * 非阻塞 connect() 的经典 UNIX 编程模式：
+ *   1. 先调用 poll()/select() 等待 socket 变为可写（POLLOUT 就绪）
+ *   2. 再通过 redisCheckConnectDone() 区分连接究竟成功还是失败
+ *
+ * 为什么需要第 2 步？因为 poll() 返回可写只说明 TCP 三次握手完成，
+ * 不能区分“连接成功”和“连接失败但 socket 仍可写”（例如对端 ECONNREFUSED）。
+ *
+ * 参数:
+ *   c    redis 上下文，其中 c->fd 必须已被设为非阻塞模式
+ *   msec 超时时间（毫秒），-1 表示无限等待
+ *
+ * 返回值:
+ *   REDIS_OK    连接成功建立
+ *   REDIS_ERR   连接失败（超时、被拒绝等），错误信息已写入 c->err
+ */
 static int redisContextWaitReady(redisContext *c, long msec) {
     struct pollfd   wfd[1];
 
     wfd[0].fd     = c->fd;
-    wfd[0].events = POLLOUT;
+    wfd[0].events = POLLOUT;   /* 等待 socket 变为可写，即三次握手完成 */
 
+    /*
+     * 只有 errno == EINPROGRESS 才需要等待。
+     * 如果 connect() 之后 errno 不是 EINPROGRESS，说明出现了不可恢复的错误。
+     */
     if (errno == EINPROGRESS) {
         int res;
 
+        /*
+         * poll() 返回值：
+         *   -1  系统调用出错（如被信号中断）
+         *    0  超时，在 msec 毫秒内 socket 未就绪
+         *   >0  正数（这里只监听 1 个 fd，所以返回 1），表示 socket 可写
+         */
         if ((res = poll(wfd, 1, msec)) == -1) {
             __redisSetErrorFromErrno(c, REDIS_ERR_IO, "poll(2)");
             redisNetClose(c);
             return REDIS_ERR;
         } else if (res == 0) {
+            /* poll 超时 → 连接超时 */
             errno = ETIMEDOUT;
             __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
             redisNetClose(c);
             return REDIS_ERR;
         }
 
+        /*
+         * res == 1：socket 变为可写，但还需进一步确认连接是否真的成功。
+         * 非阻塞 connect 可能失败（如 ECONNREFUSED），此时 socket 同样可写，
+         * 需要通过 getsockopt(SO_ERROR) 获取底层真实错误。
+         *
+         * redisCheckConnectDone 返回值：
+         *   REDIS_OK && *completed == 1  → 连接成功
+         *   REDIS_OK && *completed == 0  → 连接仍在进行中（EALREADY/EWOULDBLOCK）
+         *   REDIS_ERR                     → 连接失败
+         */
         if (redisCheckConnectDone(c, &res) != REDIS_OK || res == 0) {
+            /* 连接失败或仍在进行中，获取底层 socket 错误信息 */
             redisCheckSocketError(c);
             return REDIS_ERR;
         }
@@ -299,43 +352,79 @@ static int redisContextWaitReady(redisContext *c, long msec) {
         return REDIS_OK;
     }
 
+    /* errno 不是 EINPROGRESS，直接报错 */
     __redisSetErrorFromErrno(c,REDIS_ERR_IO,NULL);
     redisNetClose(c);
     return REDIS_ERR;
 }
 
+/*
+ * 检查非阻塞 connect() 是否完成，并区分成功、失败与进行中三种状态。
+ *
+ * 这是非阻塞 connect 的“结果查询”标准做法：
+ *   对非阻塞 socket 再次调用 connect()，根据返回值和 errno 判断最终结果。
+ *
+ * 四层判断逻辑：
+ *   1. connect() 返回 0           → 连接成功（*completed = 1）
+ *   2. errno == EINPROGRESS      → 连接仍在进行中，
+ *                                   通过 getsockopt(SO_ERROR) 获取底层错误：
+ *                                   - SO_ERROR == 0 → 连接成功
+ *                                   - SO_ERROR != 0 → 连接失败
+ *   3. errno == EISCONN          → socket 之前已经连接成功（*completed = 1）
+ *   4. EALREADY / EWOULDBLOCK    → 连接操作尚未完成，但没有错误（*completed = 0）
+ *   5. 其他 errno                → 连接失败，返回 REDIS_ERR
+ *
+ * 参数:
+ *   c          redis 上下文
+ *   completed  输出参数，1 表示连接完成（成功），0 表示仍在进行中
+ *
+ * 返回值:
+ *   REDIS_OK    查询成功（通过 *completed 判断是否真正完成）
+ *   REDIS_ERR   getsockopt 系统调用失败或连接出现不可恢复的错误
+ */
 int redisCheckConnectDone(redisContext *c, int *completed) {
+    /* 对非阻塞 socket 再次调用 connect()，查询连接状态 */
     int rc = connect(c->fd, (const struct sockaddr *)c->saddr, c->addrlen);
     if (rc == 0) {
+        /* 连接直接成功 */
         *completed = 1;
         return REDIS_OK;
     }
     int error = errno;
     if (error == EINPROGRESS) {
-        /* must check error to see if connect failed.  Get the socket error */
+        /*
+         * connect() 仍在进行中。
+         * 必须通过 getsockopt(SO_ERROR) 获取 socket 层的真实错误状态：
+         *   - 如果 so_error == 0：非阻塞 connect 已成功完成（三次握手 OK）
+         *   - 如果 so_error != 0：连接失败，so_error 中保存了真实的错误码
+         *     （如 ECONNREFUSED、EHOSTUNREACH 等）
+         */
         int fail, so_error;
         socklen_t optlen = sizeof(so_error);
         fail = getsockopt(c->fd, SOL_SOCKET, SO_ERROR, &so_error, &optlen);
         if (fail == 0) {
             if (so_error == 0) {
-                /* Socket is connected! */
+                /* socket 层无错误 → 连接成功 */
                 *completed = 1;
                 return REDIS_OK;
             }
-            /* connection error; */
+            /* socket 层有错误 → 连接失败，用 SO_ERROR 替换当前 errno */
             errno = so_error;
             error = so_error;
         }
     }
     switch (error) {
     case EISCONN:
+        /* socket 之前已经连接成功（例如在等待过程中连接已完成） */
         *completed = 1;
         return REDIS_OK;
     case EALREADY:
     case EWOULDBLOCK:
+        /* 连接操作仍在进行中，但没有错误，正常等待即可 */
         *completed = 0;
         return REDIS_OK;
     default:
+        /* 其他 errno 均为连接失败 */
         return REDIS_ERR;
     }
 }
@@ -495,6 +584,12 @@ addrretry:
             continue;
 
         c->fd = s;
+        /*
+         * 无论用户是否指定了 REDIS_BLOCK 标志，此处无条件将 socket 设为非阻塞模式。
+         * 目的是让 connect() 变为非阻塞调用，从而可以通过 poll() + 
+         * redisContextWaitReady() 实现带超时的连接等待。
+         * 阻塞模式的 connect() 无法被超时控制中断，一旦卡住就无解了。
+         */
         if (redisSetBlocking(c,0) != REDIS_OK)
             goto error;
         if (c->tcp.source_addr) {
@@ -545,7 +640,19 @@ addrretry:
                 redisNetClose(c);
                 continue;
             } else if (errno == EINPROGRESS) {
+                /*
+                 * EINPROGRESS 是非阻塞 connect() 的正常返回值，
+                 * 表示 TCP 三次握手正在进行中（尚未完成）。
+                 *
+                 * 由 errno == EINPROGRESS 也可以反证 socket 已处于非阻塞模式，
+                 * 因为阻塞 socket 上的 connect() 永远不会返回 EINPROGRESS。
+                 */
                 if (blocking) {
+                    /*
+                     * 用户期望阻塞模式 → 跳到 wait_for_ready 分支，
+                     * 通过 poll() 等待连接完成（带超时），
+                     * 模拟阻塞 connect() 的行为，但多了超时控制。
+                     */
                     goto wait_for_ready;
                 }
                 /* This is ok.
@@ -561,12 +668,23 @@ addrretry:
                 }
             } else {
                 wait_for_ready:
+                /*
+                 * 非阻塞 connect() 返回了 EINPROGRESS 且用户期望阻塞模式，
+                 * 或者 connect() 直接返回了其他错误（非 EINPROGRESS/EHOSTUNREACH/EADDRNOTAVAIL）。
+                 * 通过 redisContextWaitReady() 利用 poll() 等待连接完成，
+                 * 实现带超时控制的连接等待。
+                 */
                 if (redisContextWaitReady(c,timeout_msec) != REDIS_OK)
                     goto error;
+                /* 连接成功后禁用 Nagle 算法（TCP_NODELAY），减少小包延迟 */
                 if (redisSetTcpNoDelay(c) != REDIS_OK)
                     goto error;
             }
         }
+        /*
+         * 如果用户期望阻塞模式，连接建立后恢复 socket 为阻塞模式。
+         * 注意：非阻塞模式下不会执行此操作，socket 始终保持非阻塞。
+         */
         if (blocking && redisSetBlocking(c,1) != REDIS_OK)
             goto error;
 

@@ -7,6 +7,8 @@
 #include "arpa/inet.h"
 #include "unistd.h"
 
+void socketDemo();
+
 void epollDemo() {
     printf("startEpoll\n");
     int listen_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -68,11 +70,29 @@ void threadDemo() {
 
 }
 
+void socketDemo() {
+    printf("start socketDemo\n");
+    int fd = socket(AF_INET, SOCK_STREAM, 0);
+    printf("socket fd: %d\n", fd);
+
+    struct sockaddr_in addr = {0};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(6380);
+    inet_pton(AF_INET, "127.0.0.1", &addr.sin_addr);
+
+    int ret = connect(fd, (struct sockaddr *)&addr, sizeof(addr));
+    printf("connect ret: %d\n", ret);
+
+    close(fd);
+}
+
 void main() {
 //    epollDemo();
 //    forkDemo();
-    threadDemo();
+//    threadDemo();
+    socketDemo();
 }
+
 
 
 
