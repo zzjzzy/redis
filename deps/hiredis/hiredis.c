@@ -842,6 +842,7 @@ redisContext *redisConnectWithOptions(const redisOptions *options) {
     if (redisContextUpdateConnectTimeout(c, options->connect_timeout) != REDIS_OK ||
         redisContextUpdateCommandTimeout(c, options->command_timeout) != REDIS_OK) {
         __redisSetError(c, REDIS_ERR_OOM, "Out of memory");
+        printf("redisConnectWithOptions REDIS_ERR_OOM \n");
         return c;
     }
 

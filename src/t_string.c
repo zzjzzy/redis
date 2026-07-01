@@ -386,9 +386,10 @@ void myCmd(client *c) {
         myOptions.push_cb = NULL;
         myOptions.options |= REDIS_OPT_NO_PUSH_AUTOFREE;
 //        myOptions.options |= REDIS_OPT_NONBLOCK;
-        // 这里设置成REDIS_BLOCK，下面的rc->flags就不是REDIS_CONNECTED了，也可以获取到错误信息
-        // 注意还需要设置connect_timeout，不然默认值是-1，还是没法等待连接成功
-        myOptions.options |= REDIS_BLOCK;
+        // 这里设置成REDIS_BLOCK（设置REDIS_OPT_NONBLOCK就是非阻塞，什么都不设置就是阻塞，所以下面注释的REDIS_OPT_NONBLOCK不需要设置）
+        // 下面的rc->flags就不是REDIS_CONNECTED了，也可以获取到错误信息
+        // 注意还需要设置connect_timeout，不然默认值是-1，会一直等待
+//        myOptions.options |= REDIS_OPT_NONBLOCK;
         struct timeval tv = { .tv_sec = 1, .tv_usec = 500000 };
         myOptions.connect_timeout = &tv;
         myOptions.type = REDIS_CONN_TCP;
@@ -401,6 +402,7 @@ void myCmd(client *c) {
         /* 这里打印的是rc->flags=2，也就是REDIS_CONNECTED，是因为设置的是REDIS_OPT_NONBLOCK
          * 看_redisContextConnectTcp(net.c)代码，如果连接不通，会走到else if (errno == EINPROGRESS)分支，这里判断如果不是blocking
          * 会直接走到成功赋值c->flags |= REDIS_CONNECTED;
+         * 如果设置了block模式，rc->flags=1，1代表REDIS_BLOCK(hiredis.h中定义的)
          * */
         printf("rc->flags:%d\n", rc->flags);
     }
