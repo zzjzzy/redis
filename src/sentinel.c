@@ -2444,6 +2444,7 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
     if (now - ri->link->last_reconn_time < sentinel_ping_period) return;
     ri->link->last_reconn_time = now;
 
+    // 经过分析，最后简单总结就是，如果连接失败，link->cc就会一直为空，就会一直尝试连接
     /* Commands connection. */
     if (link->cc == NULL) {
 

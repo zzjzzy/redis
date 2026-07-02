@@ -496,7 +496,7 @@ void feedReplicationBuffer(char *s, size_t len) {
             }
         }
         vis[vi] = '\0';
-        serverLog(LL_NOTICE, "feedReplicationBuffer finished, s:%s,len:%zu,master_repl_offset:%lld", vis, mylen, server.master_repl_offset);
+//        serverLog(LL_NOTICE, "feedReplicationBuffer finished, s:%s,len:%zu,master_repl_offset:%lld", vis, mylen, server.master_repl_offset);
         zfree(vis);
     }
 }
