@@ -337,6 +337,7 @@ static void redisAeDelRead(void *privdata) {
     }
 }
 
+// 调用方式看sentinelReconnectInstance注释
 static void redisAeAddWrite(void *privdata) {
     redisAeEvents *e = (redisAeEvents*)privdata;
     aeEventLoop *loop = e->loop;
@@ -362,6 +363,7 @@ static void redisAeCleanup(void *privdata) {
     zfree(e);
 }
 
+/*这个方法就是设置写回调函数，没有其他操作*/
 static int redisAeAttach(aeEventLoop *loop, redisAsyncContext *ac) {
     redisContext *c = &(ac->c);
     redisAeEvents *e;
@@ -2429,11 +2431,11 @@ static int instanceLinkNegotiateTLS(redisAsyncContext *context) {
  * one of the two links (commands and pub/sub) is missing. */
 void sentinelReconnectInstance(sentinelRedisInstance *ri) {
 
-    // 进测试发现，如果连接成功，会设置ri->link->disconnected=0，这样后续定时调度就直接return了
+    // 经测试发现，如果连接成功，会设置ri->link->disconnected=0，这样后续定时调度就直接return了
     // 如果连接失败，ri->link->disconnected=1，就会一直尝试连接
     // 但是，测试发现节点连接失败，也会走到最后的分支，赋值disconnected=0，disconnected重新赋值为1并且清空link->cc是在
     // instanceLinkConnectionError(sentinelLinkEstablishedCallback->instanceLinkConnectionError)
-    // sentinelLinkEstablishedCallback的调用流程看这个方法的注释
+    // sentinelLinkEstablishedCallback 的调用流程看这个方法的注释
     if (ri->link->disconnected == 0) return;
     if (ri->addr->port == 0) return; /* port == 0 means invalid address. */
     instanceLink *link = ri->link;
@@ -2457,6 +2459,12 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
             }
         }
 
+        // 由于设置的非阻塞模式，net.c的_redisContextConnectTcp会设置link.cc中的err=0，并且cc.flags是REDIS_CONNECTED(看mycmd的注释)
+        // 但是redisAsyncInitialize(async.c)中又会c->flags &= ~REDIS_CONNECTED;
+        // 所以最终这里的代码会走到最后的else，最后触发写事件后，会调用redisAeWriteEvent->redisAsyncHandleWrite
+        // redisAsyncHandleWrite这里会判断if (!(c->flags & REDIS_CONNECTED))，就会继续检查连接状态
+        // 检查连接状态的时候如果连接不成功就会调用sentinelLinkEstablishedCallback清空link.cc和重置disconnected状态
+        // 具体调用流程看sentinelLinkEstablishedCallback注释
         link->cc = redisAsyncConnectBind(ri->addr->ip,ri->addr->port,server.bind_source_addr);
 
         if (link->cc && !link->cc->err) anetCloexec(link->cc->c.fd);
@@ -2483,7 +2491,22 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
             link->pending_commands = 0;
             link->cc_conn_time = mstime();
             link->cc->data = link;
+            // 设置一些回调函数
             redisAeAttach(server.el,link->cc);
+            /* 设置sentinelLinkEstablishedCallback到redisAsyncContext.onConnect变量
+               然后会调用_EL_ADD_WRITE，也就是调用redisAsyncContext.ev.addWrite，
+               也就是调用redisAeAttach中赋值的redisAeAddWrite
+               所以调用下面这个方法会执行当前文件中的redisAeAddWrite方法
+               redisAeAddWrite会把当前的连接fd放到eventLoop中(写事件)，传递的处理函数是redisAeWriteEvent
+               redisAeWriteEvent->redisAsyncHandleWrite又会调用redisContext.funcs.async_write(hiredis.c)
+               async_write的默认实现是redisAsyncWrite(async.c)，redisAsyncWrite在写成功后，会调用_EL_ADD_READ
+               也就是调用redisAsyncContext.ev.addWrite，也就是调用本类中的redisAeAddRead
+               redisAeAddRead会将fd添加到eventLoop中(读事件)，传递的处理函数是redisAeReadEvent
+               redisAeReadEvent->redisAsyncHandleRead->redisContext.funcs.async_read
+               async_read的默认实现是redisAsyncRead(async.c)，redisAsyncRead->redisBufferRead->redisContext.funcs.read
+               funcs.read默认实现是redisNetRead(net.c)，这个方法就是调用recv读取数据
+               sentinelLinkEstablishedCallback这个方法的触发流程方法注释有些
+            */
             redisAsyncSetConnectCallback(link->cc,
                     sentinelLinkEstablishedCallback);
             redisAsyncSetDisconnectCallback(link->cc,
