@@ -781,6 +781,8 @@ void redisAsyncHandleWrite(redisAsyncContext *ac) {
             return;
     }
 
+    // 这个调用的是hiredis.c的async_write，但是async_write又调用的上面的redisAsyncWrite
+    // 上面的redisAsyncWrite又调用的redisBufferWrite(hiredis.c)
     c->funcs->async_write(ac);
 }
 

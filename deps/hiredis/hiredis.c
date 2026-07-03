@@ -1006,6 +1006,7 @@ int redisBufferWrite(redisContext *c, int *done) {
         return REDIS_ERR;
 
     if (hi_sdslen(c->obuf) > 0) {
+        // 这里的c->funcs->write是redisNetWrite(net.c)
         ssize_t nwritten = c->funcs->write(c);
         if (nwritten < 0) {
             return REDIS_ERR;

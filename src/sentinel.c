@@ -2463,8 +2463,10 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
         // 由于设置的非阻塞模式，net.c的_redisContextConnectTcp会设置link.cc中的err=0，并且cc.flags是REDIS_CONNECTED(看mycmd的注释)
         // 但是redisAsyncInitialize(async.c)中又会c->flags &= ~REDIS_CONNECTED;
         // 所以最终这里的代码会走到最后的else，最后触发写事件后，会调用redisAeWriteEvent->redisAsyncHandleWrite
-        // redisAsyncHandleWrite这里会判断if (!(c->flags & REDIS_CONNECTED))，就会继续检查连接状态
+        // redisAsyncHandleWrite这里会判断if (!(c->flags & REDIS_CONNECTED))，就会继续检查连接状态(调用__redisAsyncHandleConnect)
         // 检查连接状态的时候如果连接不成功就会调用sentinelLinkEstablishedCallback清空link.cc和重置disconnected状态
+        // __redisAsyncHandleConnect中检查连接状态时，如果连接成功，会更新redisContext.flags=REDIS_CONNECTED，并且也会调用__redisRunConnectCallback
+        // 其实就是调用sentinelLinkEstablishedCallback
         // 具体调用流程看sentinelLinkEstablishedCallback注释
         link->cc = redisAsyncConnectBind(ri->addr->ip,ri->addr->port,server.bind_source_addr);
 
