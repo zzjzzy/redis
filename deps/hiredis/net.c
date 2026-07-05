@@ -74,6 +74,7 @@ ssize_t redisNetRead(redisContext *c, char *buf, size_t bufcap) {
             return -1;
         }
     } else if (nread == 0) {
+        printf("net.c Server closed the connection\n");
         __redisSetError(c, REDIS_ERR_EOF, "Server closed the connection");
         return -1;
     } else {

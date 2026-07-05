@@ -168,6 +168,7 @@ typedef struct instanceLink {
                                  set to 0 when a pong is received, and set again
                                  to the current time if the value is 0 and a new
                                  ping is sent. */
+    // 看sentinelSendPeriodicCommands方法使用last_ping_time的地方，有更详细的注释
     mstime_t last_ping_time;  /* Time at which we sent the last ping. This is
                                  only used to avoid sending too many pings
                                  during failure. Idle time is computed using
@@ -3246,12 +3247,17 @@ void sentinelSendPeriodicCommands(sentinelRedisInstance *ri) {
     }
 
     /* Send PING to all the three kinds of instances. */
+    /*看last_ping_time的注释，last_ping_time是用来避免fail期间发送过多的ping命令，
+     * 因为这个方法是定时任务触发的，定时任务可能每10ms就执行一次，如果对端下线，last_pong_time会一直是旧值
+     * 那(now - ri->link->last_pong_time) > ping_period就会一直成立，如果没有后面那个判断，就会导致ping命令每10ms就会发送一次
+     * */
     if ((now - ri->link->last_pong_time) > ping_period &&
                (now - ri->link->last_ping_time) > ping_period/2) {
         sentinelSendPing(ri);
     }
 
     /* PUBLISH hello messages to all the three kinds of instances. */
+    // sentinel_publish_period=2000
     if ((now - ri->last_pub_time) > sentinel_publish_period) {
         sentinelSendHello(ri);
     }
@@ -4617,6 +4623,7 @@ void sentinelPublishCommand(client *c) {
 void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
     mstime_t elapsed = 0;
 
+    // 看act_ping_time注释，收到pong时act_ping_time会重置为0，所以如果act_ping_time有值，就是发送ping后没有正常收到pong
     if (ri->link->act_ping_time)
         elapsed = mstime() - ri->link->act_ping_time;
     else if (ri->link->disconnected)
@@ -4637,6 +4644,8 @@ void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
         (mstime() - ri->link->act_ping_time) > (ri->down_after_period/2) &&
         (mstime() - ri->link->last_pong_time) > (ri->down_after_period/2))
     {
+        // 由于master下线后会马上触发sentinelDisconnectCallback，ri->link->cc会被置空，所以master下线走不到这个分支
+        printf("sentinelCheckSubjectivelyDown校验到长时间未回复pong，调用instanceLinkCloseConnection\n");
         instanceLinkCloseConnection(ri->link,ri->link->cc);
     }
 
@@ -4669,6 +4678,8 @@ void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
     {
         /* Is subjectively down */
         if ((ri->flags & SRI_S_DOWN) == 0) {
+            // 已测试，这个就是在down-after-milliseconds后触发
+            printf("检测到下线，发送+down event, elapsed:%lld, ri->down_after_period:%lld\n", elapsed, ri->down_after_period);
             sentinelEvent(LL_WARNING,"+sdown",ri,"%@");
             ri->s_down_since_time = mstime();
             ri->flags |= SRI_S_DOWN;

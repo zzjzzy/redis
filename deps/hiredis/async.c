@@ -712,6 +712,7 @@ void redisAsyncRead(redisAsyncContext *ac) {
 //           c->tcp.host, c->tcp.source_addr, c->tcp.port);
 
     if (redisBufferRead(c) == REDIS_ERR) {
+        printf("redisBufferRead返回REDIS_ERR\n");
         __redisAsyncDisconnect(ac);
     } else {
         /* Always re-schedule reads */
@@ -752,6 +753,7 @@ void redisAsyncWrite(redisAsyncContext *ac) {
     int done = 0;
 
     if (redisBufferWrite(c,&done) == REDIS_ERR) {
+        printf("redisBufferWrite返回REDIS_ERR\n");
         __redisAsyncDisconnect(ac);
     } else {
         /* Continue writing when not done, stop writing otherwise */

@@ -436,9 +436,10 @@ void myCmd(client *c) {
                 printf("whiredis: redisAppendCommand failed\n");
             } else {
                 int wdone = 0;
-                // 关闭slave, write不会返回异常，下面会打印whiredis: redisGetReply failed, err: Server closed the connection
+                // 关闭slave, write不会返回异常，下面读取数据会打印whiredis: redisGetReply failed, err: Server closed the connection
                 // 重启slave会报同样的错误，因为之前的tcp连接已经没有了
                 // 如果kill -9 slave，现象也是一样的，根据AI分析，如果kill -9但是操作系统还活着，read会返回-1
+                // 关闭slave，tcp会发送FIN，recv返回0，net.c就会检测到
                 ret = redisBufferWrite(myrc, &wdone);
                 if (ret == REDIS_ERR) {
                     printf("whiredis: redisBufferWrite failed, err: %s\n", myrc->errstr);
