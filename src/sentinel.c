@@ -4645,6 +4645,7 @@ void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
         (mstime() - ri->link->last_pong_time) > (ri->down_after_period/2))
     {
         // 由于master下线后会马上触发sentinelDisconnectCallback，ri->link->cc会被置空，所以master下线走不到这个分支
+        // 可以通过模拟master回复sentinel丢包(make mocknetblock)模拟到这个场景，语雀上有笔记说明
         printf("sentinelCheckSubjectivelyDown校验到长时间未回复pong，调用instanceLinkCloseConnection\n");
         instanceLinkCloseConnection(ri->link,ri->link->cc);
     }
