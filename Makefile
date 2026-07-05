@@ -14,6 +14,7 @@ mydebug:
 
 myhiredis:
 	cd deps && make hiredis && cd ..
+#   如果按照下面命令报错【'jemalloc/jemalloc.h' file not found】，就单独把jemalloc make一次试试
 #    make hiredis lua fpconv hdr_histogram jemalloc linenoise
 
 cli:
