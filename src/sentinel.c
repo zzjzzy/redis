@@ -186,6 +186,8 @@ typedef struct sentinelRedisInstance {
     char *runid;    /* Run ID of this instance, or unique ID if is a Sentinel.*/
     uint64_t config_epoch;  /* Configuration epoch. */
     sentinelAddr *addr; /* Master host. */
+    // 这个link字段可能被多个instance共享，主要是多master情况，多个master用相同的sentinel监控，创建的instance是多个，
+    // 但是连接其他sentinel的网络连接可以用同一个
     instanceLink *link; /* Link to the instance, may be shared for Sentinels. */
     mstime_t last_pub_time;   /* Last time we sent hello via Pub/Sub. */
     mstime_t last_hello_time; /* Only used if SRI_SENTINEL is set. Last time
@@ -3221,6 +3223,7 @@ void sentinelSendPeriodicCommands(sentinelRedisInstance *ri) {
     {
         info_period = 1000;
     } else {
+        // sentinel_info_period = 10000
         info_period = sentinel_info_period;
     }
 
@@ -3228,6 +3231,7 @@ void sentinelSendPeriodicCommands(sentinelRedisInstance *ri) {
      * the configured 'down-after-milliseconds' time, but every second
      * anyway if 'down-after-milliseconds' is greater than 1 second. */
     ping_period = ri->down_after_period;
+    // sentinel_ping_period=1s，每隔1s发送ping，除非配置的down_after_period小于1s
     if (ping_period > sentinel_ping_period) ping_period = sentinel_ping_period;
 
     /* Send INFO to masters and slaves, not sentinels. */

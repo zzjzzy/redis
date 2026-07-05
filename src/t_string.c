@@ -371,6 +371,8 @@ void getCommand(client *c) {
     getGenericCommand(c);
 }
 
+redisContext *myrc;
+
 void myCmd(client *c) {
     printf("mycmd called, server.stat_total_reads_processed: %lld\n", server.stat_total_reads_processed);
     robj *param = c->argv[1];
@@ -385,16 +387,16 @@ void myCmd(client *c) {
         redisOptions myOptions = {0};
         myOptions.push_cb = NULL;
         myOptions.options |= REDIS_OPT_NO_PUSH_AUTOFREE;
-//        myOptions.options |= REDIS_OPT_NONBLOCK;
-        // 这里设置成REDIS_BLOCK（设置REDIS_OPT_NONBLOCK就是非阻塞，什么都不设置就是阻塞，所以下面注释的REDIS_OPT_NONBLOCK不需要设置）
-        // 下面的rc->flags就不是REDIS_CONNECTED了，也可以获取到错误信息
-        // 注意还需要设置connect_timeout，不然默认值是-1，会一直等待
-//        myOptions.options |= REDIS_OPT_NONBLOCK;
+        if (strcasestr((char *)decoded->ptr, "nonblock")) {
+            myOptions.options |= REDIS_OPT_NONBLOCK;
+        }
         struct timeval tv = { .tv_sec = 1, .tv_usec = 500000 };
         myOptions.connect_timeout = &tv;
         myOptions.type = REDIS_CONN_TCP;
         myOptions.endpoint.tcp.ip = "127.0.0.1";
-        myOptions.endpoint.tcp.port = atoi((char *)decoded->ptr + 7);
+        char portStr[5] = {0};
+        memcpy(portStr, (char *)decoded->ptr + 7, 4);
+        myOptions.endpoint.tcp.port = atoi(portStr);
         redisContext *rc = redisConnectWithOptions(&myOptions);
         printf("rc.fd:%d, rc.err:%d, rc.errstr:%s, rc.tcp.host:%s, "
                "rc.tcp.source_addr:%s, rc.tcp.port:%d\n",
@@ -405,6 +407,96 @@ void myCmd(client *c) {
          * 如果设置了block模式，rc->flags=1，1代表REDIS_BLOCK(hiredis.h中定义的)
          * */
         printf("rc->flags:%d\n", rc->flags);
+        printf("  flags detail:");
+        if (rc->flags & REDIS_BLOCK) printf(" BLOCK(0x%x)", REDIS_BLOCK);
+        if (rc->flags & REDIS_CONNECTED) printf(" CONNECTED(0x%x)", REDIS_CONNECTED);
+        if (rc->flags & REDIS_DISCONNECTING) printf(" DISCONNECTING(0x%x)", REDIS_DISCONNECTING);
+        if (rc->flags & REDIS_FREEING) printf(" FREEING(0x%x)", REDIS_FREEING);
+        if (rc->flags & REDIS_IN_CALLBACK) printf(" IN_CALLBACK(0x%x)", REDIS_IN_CALLBACK);
+        if (rc->flags & REDIS_SUBSCRIBED) printf(" SUBSCRIBED(0x%x)", REDIS_SUBSCRIBED);
+        if (rc->flags & REDIS_MONITORING) printf(" MONITORING(0x%x)", REDIS_MONITORING);
+        if (rc->flags & REDIS_REUSEADDR) printf(" REUSEADDR(0x%x)", REDIS_REUSEADDR);
+        if (rc->flags & REDIS_SUPPORTS_PUSH) printf(" SUPPORTS_PUSH(0x%x)", REDIS_SUPPORTS_PUSH);
+        if (rc->flags & REDIS_NO_AUTO_FREE) printf(" NO_AUTO_FREE(0x%x)", REDIS_NO_AUTO_FREE);
+        if (rc->flags & REDIS_NO_AUTO_FREE_REPLIES) printf(" NO_AUTO_FREE_REPLIES(0x%x)", REDIS_NO_AUTO_FREE_REPLIES);
+        if (rc->flags & REDIS_PREFER_IPV4) printf(" PREFER_IPV4(0x%x)", REDIS_PREFER_IPV4);
+        if (rc->flags & REDIS_PREFER_IPV6) printf(" PREFER_IPV6(0x%x)", REDIS_PREFER_IPV6);
+        printf("\n");
+        myrc = rc;
+    } else if (strncasecmp((char *)decoded->ptr, "1hiredis", 8) == 0) {
+        // 调用redisBufferWrite(hiredis.c)写入ping命令，并阻塞读取返回值打印
+        // 这里如果自己连自己测试，会卡住，因为下面的read是阻塞读，会导致mycmd命令阻塞，这样发送的ping命令就没机会执行
+        // 启动一个slave，连接slave测试，测试通过
+        if (myrc == NULL || myrc->err) {
+            printf("whiredis: myrc is not connected, err: %s\n",
+                   myrc ? myrc->errstr : "myrc is NULL");
+        } else {
+            int ret = redisAppendCommand(myrc, "PING");
+            if (ret == REDIS_ERR) {
+                printf("whiredis: redisAppendCommand failed\n");
+            } else {
+                int wdone = 0;
+                // 关闭slave, write不会返回异常，下面会打印whiredis: redisGetReply failed, err: Server closed the connection
+                // 重启slave会报同样的错误，因为之前的tcp连接已经没有了
+                // 如果kill -9 slave，现象也是一样的，根据AI分析，如果kill -9但是操作系统还活着，read会返回-1
+                ret = redisBufferWrite(myrc, &wdone);
+                if (ret == REDIS_ERR) {
+                    printf("whiredis: redisBufferWrite failed, err: %s\n", myrc->errstr);
+                } else {
+                    printf("whiredis: redisBufferWrite success: %d\n", ret);
+                    void *reply = NULL;
+                    sleep(1);
+                    /*如果设置成nonblock，即使上面sleep一会，这里返回的reply是NULL，为什么?
+                     * 答：因为redisGetReply中会判断，如果是nonblock模式，只会调用redisNextInBandReplyFromReader，这个方法只是从
+                     * redisReader.buf中读取数据，不会调用recv接受socket数据
+                     * sentinel中是因为把socket放到了eventLoop中，有数据可写会调用redisAeReadEvent，这个的调用流程语雀有梳理，
+                     * 会调用recv把数据放到redisReader.buf中
+                     * */
+                    if ((myrc->flags & REDIS_BLOCK) == 0) {
+                        // 根据上面的分析，如果是非阻塞模式，需要调用read方法先把数据读到buf中
+                        redisBufferRead(myrc);
+                    }
+                    ret = redisGetReply(myrc, &reply);
+                    if (ret == REDIS_ERR) {
+                        printf("whiredis: redisGetReply failed, err: %s\n", myrc->errstr);
+                    } else if (reply == NULL) {
+                        printf("whiredis: reply is NULL\n");
+                    } else {
+                        redisReply *r = (redisReply *)reply;
+                        printf("whiredis PING reply type: %d, str: %s\n", r->type, r->str);
+                        freeReplyObject(reply);
+                    }
+                }
+            }
+        }
+    } else if (strncasecmp((char *)decoded->ptr, "2hiredis", 8) == 0) {
+        // 测试不写数据，只读
+        if (myrc == NULL || myrc->err) {
+            printf("whiredis: myrc is not connected, err: %s\n",
+                   myrc ? myrc->errstr : "myrc is NULL");
+        } else {
+            int ret;
+            void *reply = NULL;
+            sleep(1);
+            if ((myrc->flags & REDIS_BLOCK) == 0) {
+                // 根据上面的分析，如果是非阻塞模式，需要调用read方法先把数据读到buf中
+                redisBufferRead(myrc);
+            }
+            /* 如果是block模式，如果没有数据，这里会阻塞住
+             * 如果是非阻塞模式，不会阻塞住，reply是NULL，注意非阻塞模式，上面的redisBufferRead也不会阻塞
+             * 如果是阻塞模式，建立连接时就会调用redisSetBlocking(net.c)，否则_redisContextConnectTcp方法就会默认设置非阻塞模式
+             * */
+            ret = redisGetReply(myrc, &reply);
+            if (ret == REDIS_ERR) {
+                printf("whiredis: redisGetReply failed, err: %s\n", myrc->errstr);
+            } else if (reply == NULL) {
+                printf("whiredis: reply is NULL\n");
+            } else {
+                redisReply *r = (redisReply *)reply;
+                printf("whiredis PING reply type: %d, str: %s\n", r->type, r->str);
+                freeReplyObject(reply);
+            }
+        }
     }
     decrRefCount(decoded);  // 注意释放引用
     robj *o = createStringObject("mycmd reply", 11);

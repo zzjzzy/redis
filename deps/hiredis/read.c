@@ -760,6 +760,7 @@ int redisReaderGetReply(redisReader *r, void **reply) {
 
     /* Process items in reply. */
     while (r->ridx >= 0)
+        // 这个方法里会赋值r->reply
         if (processItem(r) != REDIS_OK)
             break;
 

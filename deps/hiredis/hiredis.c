@@ -979,6 +979,7 @@ int redisBufferRead(redisContext *c) {
     if (c->err)
         return REDIS_ERR;
 
+    // c.funcs.read=redisNetRead
     nread = c->funcs->read(c, buf, sizeof(buf));
     if (nread < 0) {
         return REDIS_ERR;
@@ -1042,6 +1043,7 @@ static int redisHandledPushReply(redisContext *c, void *reply) {
 
 /* Get a reply from our reader or set an error in the context. */
 int redisGetReplyFromReader(redisContext *c, void **reply) {
+    //  c->reader = redisReaderCreate();
     if (redisReaderGetReply(c->reader, reply) == REDIS_ERR) {
         __redisSetError(c,c->reader->err,c->reader->errstr);
         return REDIS_ERR;

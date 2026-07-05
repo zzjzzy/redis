@@ -262,6 +262,7 @@ typedef struct redisContext {
     redisFD fd;
     int flags;
     char *obuf; /* Write buffer */
+    // redisBufferRead方法会把读到的数据放到reader里，reader就是读到的数据缓存
     redisReader *reader; /* Protocol reader */
 
     enum redisConnectionType connection_type;
