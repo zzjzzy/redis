@@ -288,6 +288,7 @@ static int __redisPushCallback(redisCallbackList *list, redisCallback *source) {
     return REDIS_OK;
 }
 
+// 把list中的第一个callback放到target中，释放第一个的内存，相当于callback是一次性的，用完就回收。
 static int __redisShiftCallback(redisCallbackList *list, redisCallback *target) {
     redisCallback *cb = list->head;
     if (cb != NULL) {

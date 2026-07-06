@@ -66,6 +66,7 @@ typedef struct sentinelAddr {
 #define SRI_SENTINEL (1<<2)
 #define SRI_S_DOWN (1<<3)   /* Subjectively down (no quorum). */
 #define SRI_O_DOWN (1<<4)   /* Objectively down (confirmed by others). */
+// sentinel instance用的
 #define SRI_MASTER_DOWN (1<<5) /* A Sentinel with this flag set thinks that
                                    its master is down. */
 #define SRI_FAILOVER_IN_PROGRESS (1<<6) /* Failover is in progress for
@@ -2607,6 +2608,7 @@ void sentinelRefreshInstanceInfo(sentinelRedisInstance *ri, const char *info) {
         sds l = lines[j];
 
         /* run_id:<40 hex chars>*/
+        // info命令返回的数据是key:value的形式
         if (sdslen(l) >= 47 && !memcmp(l,"run_id:",7)) {
             if (ri->runid == NULL) {
                 ri->runid = sdsnewlen(l+7,40);
@@ -2620,6 +2622,7 @@ void sentinelRefreshInstanceInfo(sentinelRedisInstance *ri, const char *info) {
                     }
 
                     sdsfree(ri->runid);
+                    // 注意sdsnewlen会根据init字符串创建一个新的字符串，所以这个相当于赋值ri.runid等于info返回的run_id
                     ri->runid = sdsnewlen(l+7,40);
                 }
             }
@@ -3240,6 +3243,7 @@ void sentinelSendPeriodicCommands(sentinelRedisInstance *ri) {
         (ri->info_refresh == 0 ||
         (now - ri->info_refresh) > info_period))
     {
+        // 这里传入的fn参数会在redisProcessCallbacks被调用，语雀【sentinelSendPeriodicCommands梳理】有梳理
         retval = redisAsyncCommand(ri->link->cc,
             sentinelInfoReplyCallback, ri, "%s",
             sentinelInstanceMapCommand(ri,"INFO"));
@@ -4681,6 +4685,7 @@ void sentinelCheckSubjectivelyDown(sentinelRedisInstance *ri) {
         if ((ri->flags & SRI_S_DOWN) == 0) {
             // 已测试，这个就是在down-after-milliseconds后触发
             printf("检测到下线，发送+down event, elapsed:%lld, ri->down_after_period:%lld\n", elapsed, ri->down_after_period);
+            // 除了发送，没有找到对+sdown订阅处理的地方，这个event应该是给客户端使用的，server不会处理这个
             sentinelEvent(LL_WARNING,"+sdown",ri,"%@");
             ri->s_down_since_time = mstime();
             ri->flags |= SRI_S_DOWN;
@@ -4737,6 +4742,15 @@ void sentinelCheckObjectivelyDown(sentinelRedisInstance *master) {
 
 /* Receive the SENTINEL is-master-down-by-addr reply, see the
  * sentinelAskMasterStateToOtherSentinels() function for more information. */
+/*
+ * 返回结果包含三个参数，如下所示：
+·down_state：目标Sentinel节点对于主节点的下线判断，1是下线，0是
+在线。
+·leader_runid：当leader_runid等于“*”时，代表返回结果是用来做主节点
+是否不可达，当leader_runid等于具体的runid，代表目标节点同意runid成为
+领导者。
+·leader_epoch：领导者纪元
+ * */
 void sentinelReceiveIsMasterDownReply(redisAsyncContext *c, void *reply, void *privdata) {
     sentinelRedisInstance *ri = privdata;
     instanceLink *link = c->data;
@@ -4792,6 +4806,7 @@ void sentinelAskMasterStateToOtherSentinels(sentinelRedisInstance *master, int f
         int retval;
 
         /* If the master state from other sentinel is too old, we clear it. */
+        // 长时间没回复，认为这个sentinel判定master没下线
         if (elapsed > sentinel_ask_period*5) {
             ri->flags &= ~SRI_MASTER_DOWN;
             sdsfree(ri->leader);
@@ -4817,6 +4832,13 @@ void sentinelAskMasterStateToOtherSentinels(sentinelRedisInstance *master, int f
                     sentinelInstanceMapCommand(ri,"SENTINEL"),
                     announceSentinelAddr(master->addr), port,
                     sentinel.current_epoch,
+                    // 如果是sentinelStartFailoverIfNeeded=true调用过来的，此时master->failover_state=SENTINEL_FAILOVER_STATE_WAIT_START
+                    // 这种情况用的是myid，表示请求其他sentinel让自己成功leader
+                    // sentinelCheckObjectivelyDown会判断如果达到客观下线条件，会设置master.flags=SRI_O_DOWN
+                    // 然后sentinelStartFailoverIfNeeded会判断如果SRI_O_DOWN并且满足failover，会设置SENTINEL_FAILOVER_STATE_WAIT_START
+                    // 所以这里判断到大于SENTINEL_FAILOVER_STATE_NONE，说明已经达到下线条件了，接下来就是开始投票了
+                    // 如果等于SENTINEL_FAILOVER_STATE_NONE，说明还没达到下线条件，则询问其他sentinel是否需要下线
+                    // 注意前面有判断sentinel_ask_period，所以不会一直询问，会有询问间隔。
                     (master->failover_state > SENTINEL_FAILOVER_STATE_NONE) ?
                     sentinel.myid : "*");
         if (retval == C_OK) ri->link->pending_commands++;
@@ -5080,6 +5102,7 @@ int sentinelStartFailoverIfNeeded(sentinelRedisInstance *master) {
             ctime_r(&clock,ctimebuf);
             ctimebuf[24] = '\0'; /* Remove newline. */
             master->failover_delay_logged = master->failover_start_time;
+            // 这个日志在模拟master异常时遇到了，语雀有贴这个日志
             serverLog(LL_NOTICE,
                 "Next failover delay: I will not start a failover before %s",
                 ctimebuf);
@@ -5087,6 +5110,7 @@ int sentinelStartFailoverIfNeeded(sentinelRedisInstance *master) {
         return 0;
     }
 
+    // 因为前面判断了master->flags & SRI_O_DOWN，所以走到这里master是肯定要下线的
     sentinelStartFailover(master);
     return 1;
 }
