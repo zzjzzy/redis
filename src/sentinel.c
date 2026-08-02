@@ -4862,14 +4862,17 @@ void sentinelSimFailureCrash(void) {
  * runid and populate the leader_epoch with the epoch of the vote. */
 char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char *req_runid, uint64_t *leader_epoch) {
     if (req_epoch > sentinel.current_epoch) {
+        // 这里的意思应该是，如果其他sentinel已经投票了，并且投票的epoch大于我，那我就更新成其他已投票的epoch
         sentinel.current_epoch = req_epoch;
         sentinelFlushConfig();
         sentinelEvent(LL_WARNING,"+new-epoch",master,"%llu",
             (unsigned long long) sentinel.current_epoch);
     }
 
+    // TODO PRV2 既然上面会判断if (req_epoch > sentinel.current_epoch)，那这里【sentinel.current_epoch <= req_epoch】一定为true。
     if (master->leader_epoch < req_epoch && sentinel.current_epoch <= req_epoch)
     {
+        // 由于这里会更新master.leader_epoch，所以即使sentinelVoteLeader重复调用了，【master.leader_epoch<req_epoch】大概率不成立，不会走到这个if分支
         sdsfree(master->leader);
         master->leader = sdsnew(req_runid);
         master->leader_epoch = sentinel.current_epoch;
@@ -4880,6 +4883,7 @@ char *sentinelVoteLeader(sentinelRedisInstance *master, uint64_t req_epoch, char
          * time to now, in order to force a delay before we can start a
          * failover for the same master. */
         if (strcasecmp(master->leader,sentinel.myid))
+            // TODO 稍后看，failover_start_time的作用是什么，为什么要赋值为这个值？
             master->failover_start_time = mstime()+rand()%SENTINEL_MAX_DESYNC;
     }
 
@@ -4916,6 +4920,7 @@ int sentinelLeaderIncr(dict *counters, char *runid) {
  * To be a leader for a given epoch, we should have the majority of
  * the Sentinels we know (ever seen since the last SENTINEL RESET) that
  * reported the same instance as leader for the same epoch. */
+/* 这个就是选举leader */
 char *sentinelGetLeader(sentinelRedisInstance *master, uint64_t epoch) {
     dict *counters;
     dictIterator *di;
@@ -4929,6 +4934,7 @@ char *sentinelGetLeader(sentinelRedisInstance *master, uint64_t epoch) {
     serverAssert(master->flags & (SRI_O_DOWN|SRI_FAILOVER_IN_PROGRESS));
     counters = dictCreate(&leaderVotesDictType);
 
+    // master->sentinels中不包含当前sentinel自己
     voters = dictSize(master->sentinels)+1; /* All the other sentinels and me.*/
 
     /* Count other sentinels votes */
@@ -4936,6 +4942,7 @@ char *sentinelGetLeader(sentinelRedisInstance *master, uint64_t epoch) {
     while((de = dictNext(di)) != NULL) {
         sentinelRedisInstance *ri = dictGetVal(de);
         if (ri->leader != NULL && ri->leader_epoch == sentinel.current_epoch)
+            // 这个就是counters.put(ri.leader, value+1)
             sentinelLeaderIncr(counters,ri->leader);
     }
     dictReleaseIterator(di);
@@ -4957,6 +4964,9 @@ char *sentinelGetLeader(sentinelRedisInstance *master, uint64_t epoch) {
     /* Count this Sentinel vote:
      * if this Sentinel did not voted yet, either vote for the most
      * common voted sentinel, or for itself if no vote exists at all. */
+    /* winner存在，就说明counter有值，就说明其他sentinel已经有投过票的了，那我也给这个sentinel投票
+     * 如果没有值，说明还没有sentinel投票，那我就投自己
+     * epoch是当前自己的epoch，leader_epoch是sentinelVoteLeader方法设置的 */
     if (winner)
         myvote = sentinelVoteLeader(master,epoch,winner,&leader_epoch);
     else
@@ -5226,6 +5236,8 @@ void sentinelFailoverWaitStart(sentinelRedisInstance *ri) {
     int isleader;
 
     /* Check if we are the leader for the failover epoch. */
+    /* sentineGetLeader就是计算下自己+master.sentinels的投票数是否已经够了，如果够了，就返回投票的leader，否则返回null
+     * 返回null表示投票数还不足，sentinelGetLeader只是计算，不会发起网络请求投票 */
     leader = sentinelGetLeader(ri, ri->failover_epoch);
     isleader = leader && strcasecmp(leader,sentinel.myid) == 0;
     sdsfree(leader);
@@ -5249,6 +5261,8 @@ void sentinelFailoverWaitStart(sentinelRedisInstance *ri) {
     sentinelEvent(LL_WARNING,"+elected-leader",ri,"%@");
     if (sentinel.simfailure_flags & SENTINEL_SIMFAILURE_CRASH_AFTER_ELECTION)
         sentinelSimFailureCrash();
+    /* 我是leader，我才需要select slave，发起故障转移，如果我不是leader，上面的【if (!isleader】就直接返回了
+     * 也就不会设置failover_state=SENTINEL_FAILOVER_STATE_SELECT_SLAVE，那也就不会继续执行后续的sentinelFailoverStateMachine */
     ri->failover_state = SENTINEL_FAILOVER_STATE_SELECT_SLAVE;
     ri->failover_state_change_time = mstime();
     sentinelEvent(LL_WARNING,"+failover-state-select-slave",ri,"%@");
