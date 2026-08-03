@@ -2512,7 +2512,7 @@ void sentinelReconnectInstance(sentinelRedisInstance *ri) {
                redisAeReadEvent->redisAsyncHandleRead->redisContext.funcs.async_read
                async_read的默认实现是redisAsyncRead(async.c)，redisAsyncRead->redisBufferRead->redisContext.funcs.read
                funcs.read默认实现是redisNetRead(net.c)，这个方法就是调用recv读取数据
-               sentinelLinkEstablishedCallback这个方法的触发流程方法注释有些
+               sentinelLinkEstablishedCallback这个方法的触发流程方法注释有写
             */
             redisAsyncSetConnectCallback(link->cc,
                     sentinelLinkEstablishedCallback);

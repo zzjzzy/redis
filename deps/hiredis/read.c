@@ -46,7 +46,7 @@
 #include "read.h"
 #include "sds.h"
 #include "win32.h"
-
+// ZZJ PRV2 needed
 /* Initial size of our nested reply stack and how much we grow it when needd */
 #define REDIS_READER_STACK_SIZE 9
 
