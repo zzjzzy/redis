@@ -403,11 +403,15 @@ static int processBulkItem(redisReader *r) {
     int success = 0;
 
     p = r->buf+r->pos;
+    // 如果tcp一次性没有返回所有数据，比如一行数据只返回部分，这里就读取不到line，就会返回下面的REDIS_ERR。
+    // TODO ZZJ 这个待验证
     s = seekNewline(p,r->len-r->pos);
     if (s != NULL) {
         p = r->buf+r->pos;
+        // s是指向\r的
         bytelen = s-(r->buf+r->pos)+2; /* include \r\n */
 
+        // bulk的第一行是buld的总长度，所以先读取这个
         if (string2ll(p, bytelen - 2, &len) == REDIS_ERR) {
             __redisReaderSetError(r,REDIS_ERR_PROTOCOL,
                     "Bad bulk string length");
@@ -429,7 +433,11 @@ static int processBulkItem(redisReader *r) {
             success = 1;
         } else {
             /* Only continue when the buffer contains the entire bulk item. */
+            // len表示的bulk的总长度
             bytelen += len+2; /* include \r\n */
+            /* 到这里之前的一个疑问就有答案了，就是如果tcp一次没有返回全量的数据怎么办？
+             * 这里会判断，如果没有返回全量的数据，先不读。如果后续数据有返回了，应该不会调用这个方法了，因为这个方法会处理协议头
+             * 具体会调用哪里还待研究 */
             if (r->pos+bytelen <= r->len) {
                 if ((cur->type == REDIS_REPLY_VERB && len < 4) ||
                     (cur->type == REDIS_REPLY_VERB && s[5] != ':'))
@@ -575,6 +583,7 @@ static int processItem(redisReader *r) {
     char *p;
 
     /* check if we need to read type */
+    /* 因为一次性可能读不全数据，所以可能第一次读到了协议头，下次再去读的数据是没有协议头的，开始就是协议内容 */
     if (cur->type < 0) {
         if ((p = readBytes(r,1)) != NULL) {
             switch (p[0]) {

@@ -97,6 +97,10 @@ typedef struct redisReader {
     char errstr[128]; /* String representation of error when applicable */
 
     char *buf; /* Read buffer */
+    // pos之前的数据是已经读取过的，len是buf的总长度，所以len-pos就是当前可使用的有效数据的长度
+    // 这里buf里应该存的都是有效数据，不会有尾部的空闲空间，或者有，但是是隐式的，len表示的就是有效数据的长度
+    // 从s = seekNewline(p,r->len-r->pos);这行代码可以看出来
+    // 看read.c中赋值都是r->len = hi_sdslen(r->buf);
     size_t pos; /* Buffer cursor */
     size_t len; /* Buffer length */
     size_t maxbuf; /* Max length of unused buffer */
