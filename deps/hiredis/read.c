@@ -438,6 +438,12 @@ static int processBulkItem(redisReader *r) {
             /* 到这里之前的一个疑问就有答案了，就是如果tcp一次没有返回全量的数据怎么办？
              * 这里会判断，如果没有返回全量的数据，先不读。如果后续数据有返回了，应该不会调用这个方法了，因为这个方法会处理协议头
              * 具体会调用哪里还待研究 */
+            /* r.pos表示已使用数据的长度，bytelen表示当前bulk数据的长度，如果加起来大于了r.len，就说明当前buf存的数据还不够，就不处理
+             * 否则走下面的if分支处理
+             * 如果不处理，success就是0，后面的任务也不会执行，这样会等下次把数据读全了再处理
+             * processItem方法也注释了，如果一开始已经读了请求头的type，就不会再处理type了
+             * 这里数据如果没有读全，r.pos也不会更新，所以下次再处理还是从r.pos的全量协议数据开始处理
+             * 如果这里判断内容已经全了，后面的if (success)分支就会更新r.pos */
             if (r->pos+bytelen <= r->len) {
                 if ((cur->type == REDIS_REPLY_VERB && len < 4) ||
                     (cur->type == REDIS_REPLY_VERB && s[5] != ':'))
@@ -583,7 +589,8 @@ static int processItem(redisReader *r) {
     char *p;
 
     /* check if we need to read type */
-    /* 因为一次性可能读不全数据，所以可能第一次读到了协议头，下次再去读的数据是没有协议头的，开始就是协议内容 */
+    /* 因为一次性可能读不全数据，所以可能第一次读到了协议头，下次再去读的数据是没有协议头的，开始就是协议内容，
+     * 就不走这个if分支了，直接往下走处理数据 */
     if (cur->type < 0) {
         if ((p = readBytes(r,1)) != NULL) {
             switch (p[0]) {
