@@ -222,6 +222,7 @@ static int string2ll(const char *s, size_t slen, long long *value) {
     return REDIS_OK;
 }
 
+/* readLine如果成功，r.pos就会后移，否则就不动r.pos */
 static char *readLine(redisReader *r, int *_len) {
     char *p, *s;
     int len;
@@ -237,6 +238,7 @@ static char *readLine(redisReader *r, int *_len) {
     return NULL;
 }
 
+/* 对于首次执行，没有更新过r.ridx的情况，r.ridx就是0，所以下面的if (r->ridx == 0)会直接返回 */
 static void moveToNextTask(redisReader *r) {
     redisReadTask *cur, *prv;
     while (r->ridx >= 0) {
@@ -253,9 +255,12 @@ static void moveToNextTask(redisReader *r) {
                prv->type == REDIS_REPLY_SET ||
                prv->type == REDIS_REPLY_PUSH);
         if (cur->idx == prv->elements-1) {
+            /* 这里表示处理完array的最后一个元素了，那就把task移动到array那个task
+             * 这里就是考虑嵌套array的情况 */
             r->ridx--;
         } else {
             /* Reset the type because the next item can be anything */
+            /* 这里就相当于处理array的下一个元素，cur.idx一开始等于0，++后等于1，这样就可以处理下一个元素 */
             assert(cur->idx < prv->elements);
             cur->type = -1;
             cur->elements = -1;
@@ -404,7 +409,6 @@ static int processBulkItem(redisReader *r) {
 
     p = r->buf+r->pos;
     // 如果tcp一次性没有返回所有数据，比如一行数据只返回部分，这里就读取不到line，就会返回下面的REDIS_ERR。
-    // TODO ZZJ 这个待验证
     s = seekNewline(p,r->len-r->pos);
     if (s != NULL) {
         p = r->buf+r->pos;
@@ -436,8 +440,7 @@ static int processBulkItem(redisReader *r) {
             // len表示的bulk的总长度
             bytelen += len+2; /* include \r\n */
             /* 到这里之前的一个疑问就有答案了，就是如果tcp一次没有返回全量的数据怎么办？
-             * 这里会判断，如果没有返回全量的数据，先不读。如果后续数据有返回了，应该不会调用这个方法了，因为这个方法会处理协议头
-             * 具体会调用哪里还待研究 */
+             * 这里会判断，如果没有返回全量的数据，先不读。*/
             /* r.pos表示已使用数据的长度，bytelen表示当前bulk数据的长度，如果加起来大于了r.len，就说明当前buf存的数据还不够，就不处理
              * 否则走下面的if分支处理
              * 如果不处理，success就是0，后面的任务也不会执行，这样会等下次把数据读全了再处理
@@ -471,6 +474,7 @@ static int processBulkItem(redisReader *r) {
             r->pos += bytelen;
 
             /* Set reply if this is the root object. */
+            /* 如果是array过来的，这里的ridx!=0，就不需要赋值，因为r.reply已经被赋值为arrayObject */
             if (r->ridx == 0) r->reply = obj;
             moveToNextTask(r);
             return REDIS_OK;
@@ -506,6 +510,9 @@ oom:
 }
 
 /* Process the array, map and set types. */
+/* RESP协议示例
+ * *2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n
+ * */
 static int processAggregateItem(redisReader *r) {
     redisReadTask *cur = r->task[r->ridx];
     void *obj;
@@ -513,6 +520,7 @@ static int processAggregateItem(redisReader *r) {
     long long elements;
     int root = 0, len;
 
+    /* 初始ridx=-1，在redisReaderGetReply中会赋值为0，所以初始走到这里，r.ridx=0，r.tasks=9，所以这个if不成立 */
     if (r->ridx == r->tasks - 1) {
         if (redisReaderGrow(r) == REDIS_ERR)
             return REDIS_ERR;
@@ -525,6 +533,7 @@ static int processAggregateItem(redisReader *r) {
             return REDIS_ERR;
         }
 
+        // 首次读取，r.ridx=0，root = true
         root = (r->ridx == 0);
 
         if (elements < -1 || (LLONG_MAX > SIZE_MAX && elements > SIZE_MAX) ||
@@ -551,6 +560,8 @@ static int processAggregateItem(redisReader *r) {
             if (cur->type == REDIS_REPLY_MAP) elements *= 2;
 
             if (r->fn && r->fn->createArray)
+                /* 对于array，这里会创建一个redisReply对象
+                 * /
                 obj = r->fn->createArray(cur,elements);
             else
                 obj = (void*)(uintptr_t)cur->type;
@@ -564,9 +575,17 @@ static int processAggregateItem(redisReader *r) {
             if (elements > 0) {
                 cur->elements = elements;
                 cur->obj = obj;
+                // 如果有嵌套array，比如刚处理完一个array，接下来又是array，这里的r.ridx++后就是2了
                 r->ridx++;
+                /* 上面的readLine已经移动了pos
+                 * 所以对于*2\r\n$3\r\nGET\r\n$5\r\nmykey\r\n这种协议，现在pos已经指向了$3这个位置
+                 * 这里将type赋值为-1，下次再执行到processItem时，就会继续解析新协议，也就是$3协议
+                 * 并且解析出来的对象会被赋值到parent.elements中
+                 * 首次执行，这里就是初始化r.task[1]的值，为接下来解析$3\r\nGET\r\n这一部分做准备
+                 * */
                 r->task[r->ridx]->type = -1;
                 r->task[r->ridx]->elements = -1;
+                // idx初始化为0，这样读取$3\r\nGET\r\n创建的string类型的redisReply就会被赋值到elements[0]位置
                 r->task[r->ridx]->idx = 0;
                 r->task[r->ridx]->obj = NULL;
                 r->task[r->ridx]->parent = cur;

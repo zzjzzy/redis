@@ -157,11 +157,13 @@ static void *createStringObject(const redisReadTask *task, char *str, size_t len
     r->str = buf;
 
     if (task->parent) {
+        /* 对于数组类型，task会有parent，这里可以结合createArrayObject和processAggregateItem看 */
         parent = task->parent->obj;
         assert(parent->type == REDIS_REPLY_ARRAY ||
                parent->type == REDIS_REPLY_MAP ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
+        /* 对于首次创建的array，processAggregateItem会赋值task.idx=0，所以这里就是将创建的这个redisReply对象赋值到element[0]位置 */
         parent->element[task->idx] = r;
     }
     return r;
@@ -194,6 +196,7 @@ static void *createArrayObject(const redisReadTask *task, size_t elements) {
                parent->type == REDIS_REPLY_MAP ||
                parent->type == REDIS_REPLY_SET ||
                parent->type == REDIS_REPLY_PUSH);
+        /* 这行代码，可以理解redisReadTask.idx是怎么用的 */
         parent->element[task->idx] = r;
     }
     return r;

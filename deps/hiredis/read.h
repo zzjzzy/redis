@@ -76,6 +76,7 @@ extern "C" {
 typedef struct redisReadTask {
     int type;
     long long elements; /* number of elements in multibulk container */
+    /* createArrayObject的【parent->element[task->idx] = r;】这行代码可以帮助理解这个字段 */
     int idx; /* index in parent (array) object */
     void *obj; /* holds user-generated value for a read task */
     struct redisReadTask *parent; /* parent task */
