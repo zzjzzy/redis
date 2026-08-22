@@ -115,10 +115,14 @@ static redisAsyncContext *redisAsyncInitialize(redisContext *c) {
     if (patterns == NULL)
         goto oom;
 
+    /* redisAsyncContext 的第一个成员是 redisContext c（偏移量为 0），
+     * 这里用 realloc 把之前按 sizeof(redisContext) 分配好的内存块原地
+     * 扩容为 redisAsyncContext：既保留了原有连接数据，又为异步字段腾出空间。 */
     ac = hi_realloc(c,sizeof(redisAsyncContext));
     if (ac == NULL)
         goto oom;
 
+    /* realloc 可能移动内存，c 可能已悬空，需重新指向扩容后的首成员地址。 */
     c = &(ac->c);
 
     /* The regular connect functions will always set the flag REDIS_CONNECTED.
