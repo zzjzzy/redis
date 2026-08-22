@@ -316,6 +316,31 @@ static size_t bulklen(size_t len) {
     return 1+countDigits(len)+2+len+2;
 }
 
+/* 将一条 Redis 命令格式化成 RESP 协议字节流（redisFormatCommand 的 va_list 版本）。
+ *
+ * 它接受一个类似 printf 的格式串，把参数插值进去，并按 RESP 协议拼装成完整的命令帧：
+ *   *<参数个数>\r\n
+ *   $<参数1字节数>\r\n<参数1内容>\r\n
+ *   ...
+ *
+ * 支持的占位符：
+ *   %s - C 风格以 '\0' 结尾的字符串（用 strlen 取长度）
+ *   %b - 二进制安全字符串，需额外提供 size_t 长度（可包含任意字节）
+ *   %% - 输出字面 '%'
+ *   其他 printf 风格（%d、%lu、%f 等）也会被解析并格式化
+ *
+ * 示例：
+ *   redisFormatCommand(&cmd, "SET %s %b", "name", "abc", 3);
+ * 生成的 RESP 命令帧（cmd 指向的内容）为：
+ *   *3\r\n
+ *   $3\r\nSET\r\n
+ *   $4\r\nname\r\n
+ *   $3\r\nabc\r\n
+ * 即 "SET name abc" 这条命令，共 3 个参数。
+ *
+ * 完成后把结果指针写入 *target，返回命令字节总长度。
+ * 返回值：>=0 成功（返回命令长度）；-1 内存分配失败；-2 格式串错误。
+ */
 int redisvFormatCommand(char **target, const char *format, va_list ap) {
     const char *c = format;
     char *cmd = NULL; /* final command */

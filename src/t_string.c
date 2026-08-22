@@ -31,6 +31,7 @@
 #include "my/demo/demo.h"
 #include <math.h> /* isnan(), isinf() */
 #include "hiredis.h"
+#include "async.h"
 
 /* Forward declarations */
 int getGenericCommand(client *c);
@@ -498,6 +499,10 @@ void myCmd(client *c) {
                 freeReplyObject(reply);
             }
         }
+    } else if (strncasecmp((char *)decoded->ptr, "asyncCtx", 8) == 0) {
+        redisAsyncContext* ac = redisAsyncConnectBind("127.0.0.1", 6380, NULL);
+        redisAsyncCommand(ac, NULL, NULL, "PING");
+        // TODO 还没写完
     }
     decrRefCount(decoded);  // 注意释放引用
     robj *o = createStringObject("mycmd reply", 11);
