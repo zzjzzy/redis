@@ -374,6 +374,34 @@ void getCommand(client *c) {
 
 redisContext *myrc;
 
+void myAsyncContextCallback(redisAsyncContext *c, void *reply, void *privdata) {
+    UNUSED(c);
+    redisReply* r = reply;
+    printf("myAsyncContextCallback called\n");
+    printf("myAsyncContextCallback privdata %s\n", (char *)privdata);
+    printf("myAsyncContextCallback reply %s\n", r->str);
+}
+
+void myAsyncContextHandleRead(aeEventLoop *el, int fd, void *privdata, int mask) {
+    printf("myAsyncContextHandleRead called\n");
+    UNUSED(el);
+    UNUSED(fd);
+    UNUSED(mask);
+    redisAsyncContext *ac = (redisAsyncContext*)privdata;
+    redisAsyncHandleRead(ac);
+}
+
+void myAsyncContextHandleWrite(aeEventLoop *el, int fd, void *privdata, int mask) {
+    printf("myAsyncContextHandleWrite called\n");
+    UNUSED(el);
+    UNUSED(fd);
+    UNUSED(mask);
+    // 这里如果不删除写事件，这个myAsyncContextHandleWrite会一直调用
+    aeDeleteFileEvent(server.el, fd, AE_WRITABLE);
+    redisAsyncContext *ac = (redisAsyncContext*)privdata;
+    redisAsyncHandleWrite(ac);
+}
+
 void myCmd(client *c) {
     printf("mycmd called, server.stat_total_reads_processed: %lld\n", server.stat_total_reads_processed);
     robj *param = c->argv[1];
@@ -500,9 +528,14 @@ void myCmd(client *c) {
             }
         }
     } else if (strncasecmp((char *)decoded->ptr, "asyncCtx", 8) == 0) {
+        // 此分支已测试通过
         redisAsyncContext* ac = redisAsyncConnectBind("127.0.0.1", 6380, NULL);
-        redisAsyncCommand(ac, NULL, NULL, "PING");
-        // TODO 还没写完
+        redisAsyncCommand(ac, myAsyncContextCallback, "my private data", "mycmd aaa");
+        // 参考redisAeAttach(sentinel.c)注册写时间，这里不完全采用redisAeAttach的写法，只是参考它的写法，注册下读写事件，
+        // 详细梳理可以看语雀
+        redisContext rc = ac->c;
+        aeCreateFileEvent(server.el, rc.fd, AE_READABLE, myAsyncContextHandleRead, ac);
+        aeCreateFileEvent(server.el, rc.fd, AE_WRITABLE, myAsyncContextHandleWrite, ac);
     }
     decrRefCount(decoded);  // 注意释放引用
     robj *o = createStringObject("mycmd reply", 11);
@@ -510,6 +543,7 @@ void myCmd(client *c) {
     decrRefCount(o);
 
 }
+
 
 /*
  * GETEX <key> [PERSIST][EX seconds][PX milliseconds][EXAT seconds-timestamp][PXAT milliseconds-timestamp]
